@@ -1,9 +1,13 @@
 import warnings
+from pathlib import Path
+
 warnings.simplefilter("ignore")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from ultralytics import YOLO
 
+base_path = Path(__file__).resolve().parent.parent
+save_path = base_path / "runs"
 # 检测运行环境 Win or Linux
 import platform
 if platform.system() == 'Windows':
@@ -17,8 +21,9 @@ else:
     workers = 10
     cacheTF =  True
 
-epoch_count = 250
+epoch_count = 300
 close_mosaic_count = 50
+
 
 if __name__ == '__main__':
     #model = YOLO('yolov8n.yaml')
@@ -37,7 +42,7 @@ if __name__ == '__main__':
                 resume=False,
                 amp=True,  # 如果出现训练损失为Nan可以关闭amp
                 patience=0,
-                project='../runs/train',
+                project=str(save_path),
                 name='26n_NWPU_300',
                 lr0=0.001,  # 初始学习率
                 lrf=0.01,  # 最终学习率比例
