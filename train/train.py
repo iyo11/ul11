@@ -27,7 +27,7 @@ close_mosaic_count = 50
 
 if __name__ == '__main__':
     #model = YOLO('yolov8n.yaml')
-    model = YOLO('../models/26/yolo26n.yaml')
+    model = YOLO('../models/26/yolo26n_ContextGuidedConv.yaml')
     model.train(data= datasets_path +  '/NWPU_VHR.yaml',
                 cache=cacheTF,
                 imgsz=640,
@@ -43,7 +43,7 @@ if __name__ == '__main__':
                 amp=True,  # 如果出现训练损失为Nan可以关闭amp
                 patience=0,
                 project=str(save_path),
-                name='26n_NWPU_300',
+                name='26n_ContextGuidedConv_NWPU_300',
                 lr0=0.001,  # 初始学习率
                 lrf=0.01,  # 最终学习率比例
                 #save_period=20,
