@@ -1598,8 +1598,7 @@ def parse_model(d, ch, verbose=True):
             LUMA,
             FCAttention,
             C3k2_FCA,
-            SCEU,
-            CEM
+            SCEU
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1640,7 +1639,7 @@ def parse_model(d, ch, verbose=True):
         if m in { LUMA }:
             c2 = ch[f]
             args = [c2, c2, *args]  # 自动将输入、输出通道设为一致s
-        elif m in { CARAFE,Converse2D }:
+        elif m in { CARAFE,Converse2D,CEM }:
             c2 = ch[f]
             args = [c2, *args]
 
