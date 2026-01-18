@@ -31,6 +31,7 @@ seed = 11
 optimizer = 'SGD'
 amp = False
 patience=0
+pretrained=False
 #config end
 
 
@@ -52,6 +53,7 @@ if __name__ == '__main__':
                 epochs=epoch_count,
                 single_cls=False,
                 batch=batch_size,
+                pretrained=pretrained,
                 close_mosaic=close_mosaic_count,
                 mosaic=1.0,
                 workers=workers,
