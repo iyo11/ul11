@@ -34,13 +34,16 @@ amp = False
 patience=0
 #config end
 
-m = re.search(r"yolo(\d+)([A-Za-z0-9]+)_(.+)\.yaml$", model_name)
+
+
+m = re.search(r"^yolo(\d+)([A-Za-z0-9]+)(?:_(.+))?\.yaml$", model_name)
+if not m:
+    raise ValueError(f"model_name 格式不支持: {model_name}. 例: yolo11n.yaml 或 yolo11n_xxx.yaml")
 version = m.group(1)
 variant = m.group(2)
-module  = m.group(3)
+module  = m.group(3) or "base"
 dataset_name = Path(datasets).stem
 run_name = f"{version}/{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
-
 if __name__ == '__main__':
     model = YOLO(f"../models/{version}/" + model_name)
     model.train(data= datasets_path + datasets,
