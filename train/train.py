@@ -1,3 +1,4 @@
+import re
 import warnings
 from pathlib import Path
 
@@ -21,14 +22,28 @@ else:
     workers = 10
     cacheTF =  True
 
+
+#config
 epoch_count = 300
 close_mosaic_count = 45
+model_name = "yolo11n_ContextGuidedConv.yaml"
+datasets = '/NWPU_VHR.yaml'
+seed = 42
+optimizer = 'SGD'
+amp = False
+patience=0
+#config end
 
+m = re.search(r"yolo(\d+)([A-Za-z0-9]+)_(.+)\.yaml$", model_name)
+version = m.group(1)
+variant = m.group(2)
+module  = m.group(3)
+dataset_name = Path(datasets).stem
+run_name = f"{version}{variant}_{module}_{dataset_name}_{epoch_count}"
 
 if __name__ == '__main__':
-    #model = YOLO('yolov8n.yaml')
-    model = YOLO('../models/11/yolo11n.yaml')
-    model.train(data= datasets_path +  '/NWPU_VHR.yaml',
+    model = YOLO(f"../models/{version}/" + model_name)
+    model.train(data= datasets_path + datasets,
                 cache=cacheTF,
                 imgsz=640,
                 epochs=epoch_count,
@@ -38,13 +53,11 @@ if __name__ == '__main__':
                 mosaic=1.0,
                 workers=workers,
                 device='0',
-                optimizer='SGD', # using SGD
+                optimizer=optimizer,
                 resume=False,
-                amp=False,  # 如果出现训练损失为Nan可以关闭amp
-                patience=0,
+                amp=amp,
+                patience=patience,
                 project=str(save_path),
                 name='11n_NWPU_300',
-                #save_period=20,
-                #固定随机种子
-                seed=0
+                seed=seed
                 )
