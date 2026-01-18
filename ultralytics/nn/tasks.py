@@ -10,6 +10,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
+from ultralytics.nn.add.attention.CEM import CEM
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.c.C3K2FCA import C3k2_FCA
@@ -1597,7 +1598,8 @@ def parse_model(d, ch, verbose=True):
             LUMA,
             FCAttention,
             C3k2_FCA,
-            SCEU
+            SCEU,
+            CEM
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
