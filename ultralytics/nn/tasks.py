@@ -15,7 +15,6 @@ from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.c.C3K2FCA import C3k2_FCA
 from ultralytics.nn.add.downSample.ContextGuidedConv import ContextGuidedConv
 
-from ultralytics.nn.add.downSample.WConv import WConv2d
 from ultralytics.nn.add.upsample.CARAFE import CARAFE
 from ultralytics.nn.add.upsample.Converse2D import Converse2D
 from ultralytics.nn.add.upsample.DySample import DySample
