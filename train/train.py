@@ -39,7 +39,7 @@ version = m.group(1)
 variant = m.group(2)
 module  = m.group(3)
 dataset_name = Path(datasets).stem
-run_name = f"{version}{variant}_{module}_{dataset_name}_{epoch_count}"
+run_name = f"{version}/{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
 
 if __name__ == '__main__':
     model = YOLO(f"../models/{version}/" + model_name)
@@ -58,6 +58,6 @@ if __name__ == '__main__':
                 amp=amp,
                 patience=patience,
                 project=str(save_path),
-                name='11n_NWPU_300',
+                name=run_name,
                 seed=seed
                 )
