@@ -15,6 +15,7 @@ from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.c.C3K2FCA import C3k2_FCA
 from ultralytics.nn.add.downSample.ContextGuidedConv import ContextGuidedConv
+from ultralytics.nn.add.downSample.ContextGuidedTConv import ContextGuidedTConv
 from ultralytics.nn.add.downSample.SPDContextGuidedConv import SPDContextGuidedConv
 
 from ultralytics.nn.add.upsample.CARAFE import CARAFE
@@ -1600,7 +1601,8 @@ def parse_model(d, ch, verbose=True):
             FCAttention,
             C3k2_FCA,
             SCEU,
-            SPDContextGuidedConv
+            SPDContextGuidedConv,
+            ContextGuidedTConv
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1622,7 +1624,8 @@ def parse_model(d, ch, verbose=True):
             A2C2f,
             ContextGuidedConv,
             C3k2_FCA,
-            SPDContextGuidedConv
+            SPDContextGuidedConv,
+            ContextGuidedTConv
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args

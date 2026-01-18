@@ -25,7 +25,7 @@ else:
 #config
 epoch_count = 300
 close_mosaic_count = 45
-model_name = "yolo11n_SPDContextGuidedConv_BackboneOnly.yaml"
+model_name = "yolo11n_ContextTGuidedConv_BackboneOnly.yaml"
 datasets = '/NWPU_VHR.yaml'
 seed = 11
 optimizer = 'SGD'
@@ -51,6 +51,7 @@ else:
 if __name__ == '__main__':
     model_cfg = Path("..") / "models" / version / model_name
     model = YOLO(str(model_cfg))
+    #model.info(detailed=True)
     model.train(data= datasets_path + datasets,
                 cache=cacheTF,
                 imgsz=640,
