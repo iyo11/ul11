@@ -43,9 +43,10 @@ version = m.group(1)
 variant = m.group(2)
 module  = m.group(3) or "base"
 dataset_name = Path(datasets).stem
-run_name = f"{version}/{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
+run_name = f"{version}/seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
 if __name__ == '__main__':
-    model = YOLO(f"../models/{version}/" + model_name)
+    model_cfg = Path("..") / "models" / version / model_name
+    model = YOLO(str(model_cfg))
     model.train(data= datasets_path + datasets,
                 cache=cacheTF,
                 imgsz=640,
