@@ -28,7 +28,7 @@ head:
   - [[-1, 4], 1, Concat, [1]]                        # 15
   - [-1, 2, C3k2, [256, False]]                      # 16
 
-  - [-1, 1, ContextGuidedTConv, [256, 3, 2]]          # 17
+  - [-1, 1, ContextGuidedTConv, [256]]          # 17
   - [[-1, 13], 1, Concat, [1]]                       # 18
   - [-1, 2, C3k2, [512, False]]                      # 19
 
