@@ -19,6 +19,7 @@ from ultralytics.nn.add.upsample.CARAFE import CARAFE
 from ultralytics.nn.add.upsample.Converse2D import Converse2D
 from ultralytics.nn.add.upsample.DySample import DySample
 from ultralytics.nn.add.upsample.LUMA import LUMA
+from ultralytics.nn.add.upsample.SCEU import SCEU
 from ultralytics.nn.autobackend import check_class_names
 from ultralytics.nn.modules import (
     AIFI,
