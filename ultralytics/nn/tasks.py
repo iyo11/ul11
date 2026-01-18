@@ -15,6 +15,7 @@ from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.c.C3K2FCA import C3k2_FCA
 from ultralytics.nn.add.downSample.ContextGuidedConv import ContextGuidedConv
+from ultralytics.nn.add.downSample.SPDContextGuidedConv import SPDContextGuidedConv
 
 from ultralytics.nn.add.upsample.CARAFE import CARAFE
 from ultralytics.nn.add.upsample.Converse2D import Converse2D
@@ -1598,7 +1599,8 @@ def parse_model(d, ch, verbose=True):
             LUMA,
             FCAttention,
             C3k2_FCA,
-            SCEU
+            SCEU,
+            SPDContextGuidedConv
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1619,7 +1621,8 @@ def parse_model(d, ch, verbose=True):
             C2PSA,
             A2C2f,
             ContextGuidedConv,
-            C3k2_FCA
+            C3k2_FCA,
+            SPDContextGuidedConv
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
