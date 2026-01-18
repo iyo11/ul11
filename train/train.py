@@ -44,7 +44,10 @@ version = m.group(1)
 variant = m.group(2)
 module  = m.group(3) or "base"
 dataset_name = Path(datasets).stem
-run_name = f"{dataset_name}/{version}/seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
+if module_edition != "e0":
+    run_name = f"{dataset_name}/{version}/seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
+else:
+    run_name = f"{dataset_name}/{version}/seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
 if __name__ == '__main__':
     model_cfg = Path("..") / "models" / version / model_name
     model = YOLO(str(model_cfg))

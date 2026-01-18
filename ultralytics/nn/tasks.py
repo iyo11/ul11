@@ -10,6 +10,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
+from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.downsample.ContextGuidedConv import ContextGuidedConv
 from ultralytics.nn.autobackend import check_class_names
 from ultralytics.nn.modules import (
@@ -1583,7 +1584,8 @@ def parse_model(d, ch, verbose=True):
             SCDown,
             C2fCIB,
             A2C2f,
-            ContextGuidedConv
+            ContextGuidedConv,
+            CrossAxisAttention
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
