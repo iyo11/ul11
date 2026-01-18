@@ -25,7 +25,7 @@ else:
 #config
 epoch_count = 300
 close_mosaic_count = 45
-model_name = "yolo11n_ContextGuidedConv.yaml"
+model_name = "yolo11n_LUMA.yaml"
 datasets = '/NWPU_VHR.yaml'
 seed = 11
 optimizer = 'SGD'
