@@ -22,12 +22,12 @@ else:
     cacheTF =  True
 
 epoch_count = 300
-close_mosaic_count = 50
+close_mosaic_count = 45
 
 
 if __name__ == '__main__':
     #model = YOLO('yolov8n.yaml')
-    model = YOLO('../models/26/yolo26n_ContextGuidedConv.yaml')
+    model = YOLO('../models/11/yolo11n.yaml')
     model.train(data= datasets_path +  '/NWPU_VHR.yaml',
                 cache=cacheTF,
                 imgsz=640,
@@ -38,14 +38,12 @@ if __name__ == '__main__':
                 mosaic=1.0,
                 workers=workers,
                 device='0',
-                optimizer='AdamW', # using SGD
+                optimizer='SGD', # using SGD
                 resume=False,
-                amp=True,  # 如果出现训练损失为Nan可以关闭amp
+                amp=False,  # 如果出现训练损失为Nan可以关闭amp
                 patience=0,
                 project=str(save_path),
-                name='26n_ContextGuidedConv_NWPU_300',
-                lr0=0.001,  # 初始学习率
-                lrf=0.01,  # 最终学习率比例
+                name='11n_NWPU_300',
                 #save_period=20,
                 #固定随机种子
                 seed=0
