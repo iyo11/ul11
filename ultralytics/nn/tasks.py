@@ -1596,6 +1596,7 @@ def parse_model(d, ch, verbose=True):
             LUMA,
             FCAttention,
             C3k2_FCA,
+            SCEU
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
