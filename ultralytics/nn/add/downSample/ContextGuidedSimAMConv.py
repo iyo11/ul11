@@ -25,7 +25,7 @@ class FGlo(nn.Module):
 
 class SimAM(nn.Module):
     """
-    SimAM: parameter-free attention (energy-based)
+    SimAM: parameter-free attention (energy-based)s
     这里做一个工程友好版：
       y = x + alpha * (x * att - x)  # residual attention, alpha=0 init
     """

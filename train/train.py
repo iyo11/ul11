@@ -32,7 +32,7 @@ optimizer = 'SGD'
 amp = False
 patience=0
 pretrained=True
-module_edition="e1"
+module_edition="e2"
 #config end
 
 
