@@ -7,7 +7,7 @@ test: test/images
 names:
   0: airplane
   1: baseball diamond
-  2: basketball court,
+  2: basketball court
   3: bridge
   4: ground track field
   5: harbor

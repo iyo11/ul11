@@ -408,6 +408,18 @@ def get_flops(model, imgsz=640):
     if not thop:
         return 0.0  # if not installed return 0.0 GFLOPs
 
+    # -----------------------------
+    # Custom ops: skip tensor rearrangement ops (0 FLOPs)
+    # -----------------------------
+    def _count_zero_ops(m, x, y):
+        # thop expects modules to accumulate total_ops; treat as 0 FLOPs
+        m.total_ops += torch.DoubleTensor([0])
+
+    custom_ops = {
+        nn.PixelUnshuffle: _count_zero_ops,
+        # nn.PixelShuffle: _count_zero_ops,  # 你如果也用 PixelShuffle 可以打开
+    }
+
     try:
         model = unwrap_model(model)
         p = next(model.parameters())
@@ -417,12 +429,14 @@ def get_flops(model, imgsz=640):
             # Method 1: Use stride-based input tensor
             stride = max(int(model.stride.max()), 32) if hasattr(model, "stride") else 32  # max stride
             im = torch.empty((1, p.shape[1], stride, stride), device=p.device)  # input image in BCHW format
-            flops = thop.profile(deepcopy(model), inputs=[im], verbose=False)[0] / 1e9 * 2  # stride GFLOPs
+            flops = (
+                thop.profile(deepcopy(model), inputs=[im], verbose=False, custom_ops=custom_ops)[0] / 1e9 * 2
+            )  # stride GFLOPs
             return flops * imgsz[0] / stride * imgsz[1] / stride  # imgsz GFLOPs
         except Exception:
             # Method 2: Use actual image size (required for RTDETR models)
             im = torch.empty((1, p.shape[1], *imgsz), device=p.device)  # input image in BCHW format
-            return thop.profile(deepcopy(model), inputs=[im], verbose=False)[0] / 1e9 * 2  # imgsz GFLOPs
+            return thop.profile(deepcopy(model), inputs=[im], verbose=False, custom_ops=custom_ops)[0] / 1e9 * 2
     except Exception:
         return 0.0
 
