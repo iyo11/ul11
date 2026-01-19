@@ -12,7 +12,7 @@ backbone:
   - [-1, 2, C3k2, [256, False, 0.25]]                # 2
   - [-1, 1, ContextGuidedSimAMConv, [256, 2, 16, True]]          # 3
   - [-1, 2, C3k2, [512, False, 0.25]]                # 4
-  - [-1, 1, ContextGuidedSimAMConv, [512, 2, 16, False]]          # 5
+  - [-1, 1, ContextGuidedSimAMConv, [512, 2, 16, True]]          # 5
   - [-1, 2, C3k2, [512, True]]                       # 6
   - [-1, 1, ContextGuidedSimAMConv, [1024, 2, 16, False]]         # 7
   - [-1, 2, C3k2, [1024, True]]                      # 8
