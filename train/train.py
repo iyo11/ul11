@@ -25,9 +25,9 @@ else:
 #config
 epoch_count = 300
 close_mosaic_count = 45
-model_name = "yolo11n_LUMACA.yaml"
+model_name = "yolo11n.yaml"
 datasets = '/NWPU_VHR.yaml'
-seed = 11
+seed = 42
 optimizer = 'SGD'
 amp = False
 patience=0
