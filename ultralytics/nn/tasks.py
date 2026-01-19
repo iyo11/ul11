@@ -16,16 +16,14 @@ from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.attention.MSGatedSimAM import MSGatedSimAM
 from ultralytics.nn.add.block.C3K2FCA import C3k2_FCA
 
-from ultralytics.nn.add.attention.HighFreqEnhance import HighFreqEnhance
 from ultralytics.nn.add.downSample.ContextGuidedConv import ContextGuidedConv
-from ultralytics.nn.add.downSample.LSCoordinateConv import LSCoordinateConv
-from ultralytics.nn.add.downSample.MixedConv import MixedConv
 from ultralytics.nn.add.downSample.SPDConv import SPDConv
 
 from ultralytics.nn.add.upsample.CARAFE import CARAFE
 from ultralytics.nn.add.upsample.Converse2D import Converse2D
 from ultralytics.nn.add.upsample.DySample import DySample
 from ultralytics.nn.add.upsample.LUMA import LUMA
+from ultralytics.nn.add.upsample.LUMCA import LUMACA
 from ultralytics.nn.add.upsample.SCEU import SCEU
 from ultralytics.nn.autobackend import check_class_names
 from ultralytics.nn.modules import (
@@ -1602,13 +1600,11 @@ def parse_model(d, ch, verbose=True):
             ContextGuidedConv,
             CrossAxisAttention,
             LUMA,
+            LUMACA,
             FCAttention,
             C3k2_FCA,
             SCEU,
             SPDConv,
-            MixedConv,
-            HighFreqEnhance,
-            LSCoordinateConv,
             MSGatedSimAM
         }
     )
@@ -1632,8 +1628,6 @@ def parse_model(d, ch, verbose=True):
             ContextGuidedConv,
             C3k2_FCA,
             SPDConv,
-            MixedConv,
-            LSCoordinateConv
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -1650,7 +1644,7 @@ def parse_model(d, ch, verbose=True):
                     args[j] = locals()[a] if a in locals() else ast.literal_eval(a)
         n = n_ = max(round(n * depth), 1) if n > 1 else n  # depth gain
 
-        if m in { LUMA }:
+        if m in { LUMA,LUMACA }:
             c2 = ch[f]
             args = [c2, c2, *args]  # 自动将输入、输出通道设为一致s
         elif m in { CARAFE,Converse2D,CEM }:
