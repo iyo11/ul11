@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['ContextGuidedConv_SimAM']
+__all__ = ['ContextGuidedSimAMConv']
 
 
 class FGlo(nn.Module):
@@ -25,79 +25,103 @@ class FGlo(nn.Module):
 
 class SimAM(nn.Module):
     """
-    SimAM: parameter-free attention (energy-based)s
-    这里做一个工程友好版：
-      y = x + alpha * (x * att - x)  # residual attention, alpha=0 init
+    SimAM: parameter-free attention (energy-based)
+    语义开关版本：
+      - YAML 传 simam=True  => 使用 SimAM
+      - YAML 传 simam=False => 完全不使用（Identity）
+    注意：SimAM 本身无参数；这里不加 alpha，不做软开关，保证对比实验最干净。
     """
-    def __init__(self, e_lambda=1e-4, init_alpha=0.0):
+    def __init__(self, e_lambda=1e-4):
         super().__init__()
         self.e_lambda = e_lambda
-        self.alpha = nn.Parameter(torch.tensor(float(init_alpha)))
 
     def forward(self, x):
         # x: [B, C, H, W]
-        # variance over spatial dims per channel
         mu = x.mean(dim=(2, 3), keepdim=True)
         x_mu = x - mu
         var = (x_mu * x_mu).mean(dim=(2, 3), keepdim=True)
 
-        # SimAM attention map
-        att = torch.sigmoid(x_mu * x_mu / (4 * (var + self.e_lambda)) + 0.5)
+        # attention map (0,1)
+        att = torch.sigmoid(x_mu * x_mu / (4.0 * (var + self.e_lambda)) + 0.5)
 
-        # residual-style to preserve geometry
-        y = x + self.alpha * (x * att - x)
-        return y
+        # 原版 SimAM 常用写法：x * att（直接重标定）
+        return x * att
 
 
 class ContextGuidedSimAMConv(nn.Module):
     """
-    下采样模块: (H,W,C) -> (H/2, W/2, nOut)
-    保留 FGlo，同时在融合后加入 SimAM（残差式）
+    Context Guided Downsample Block + (optional) SimAM + FGlo
+
+    输入:  [B, nIn,  H,  W]
+    输出:  [B, nOut, H/2, W/2]
+
+    YAML 参数示例：
+      - [-1, 1, ContextGuidedSimAMConv, [128, 2, 16, True]]
+        -> nOut=128, dilation_rate=2, reduction=16, simam=True
+      - [-1, 1, ContextGuidedSimAMConv, [512, 2, 16, False]]
+        -> simam=False 时 SimAM = Identity，完全不参与计算
     """
-    def __init__(self, nIn, nOut, dilation_rate=2, reduction=16,
-                 simam=True, e_lambda=1e-4, simam_init_alpha=0.0):
+    def __init__(self, nIn, nOut, dilation_rate=2, reduction=16, simam=True, e_lambda=1e-4):
         super().__init__()
 
         # 1) 下采样 + 通道扩张
-        self.conv1x1 = nn.Sequential(
+        self.conv_down = nn.Sequential(
             nn.Conv2d(nIn, nOut, kernel_size=3, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(nOut, eps=1e-3),
             nn.PReLU(nOut)
         )
 
-        # 2) 局部分支
-        self.F_loc = nn.Conv2d(nOut, nOut, kernel_size=3, padding=1,
-                               groups=nOut, bias=False)
+        # 2) 局部分支 (DWConv 3x3)
+        self.F_loc = nn.Conv2d(nOut, nOut, kernel_size=3, padding=1, groups=nOut, bias=False)
 
-        # 3) 上下文分支（空洞）
-        self.F_sur = nn.Conv2d(nOut, nOut, kernel_size=3, padding=dilation_rate,
-                               dilation=dilation_rate, groups=nOut, bias=False)
+        # 3) 上下文分支 (Dilated DWConv 3x3)
+        self.F_sur = nn.Conv2d(
+            nOut, nOut,
+            kernel_size=3,
+            padding=dilation_rate,
+            dilation=dilation_rate,
+            groups=nOut,
+            bias=False
+        )
 
-        # 4) 拼接后 BN+Act
+        # 4) 拼接后 BN + Act
         self.bn = nn.BatchNorm2d(2 * nOut, eps=1e-3)
         self.act = nn.PReLU(2 * nOut)
 
         # 5) 降维回 nOut
         self.reduce = nn.Conv2d(2 * nOut, nOut, kernel_size=1, bias=False)
 
-        # 6) SimAM（可选）
-        self.use_simam = simam
-        self.simam = SimAM(e_lambda=e_lambda, init_alpha=simam_init_alpha) if simam else nn.Identity()
+        # 6) ✅ True/False 硬开关：True=SimAM，False=Identity（零影响、零额外开销）
+        self.simam = SimAM(e_lambda=e_lambda) if simam else nn.Identity()
 
         # 7) FGlo（保留）
         self.F_glo = FGlo(nOut, reduction)
 
-    def forward(self, input):
-        x = self.conv1x1(input)
+    def forward(self, x):
+        x = self.conv_down(x)
 
         loc = self.F_loc(x)
         sur = self.F_sur(x)
 
-        joi_feat = torch.cat([loc, sur], dim=1)
-        joi_feat = self.reduce(self.act(self.bn(joi_feat)))
+        feat = torch.cat([loc, sur], dim=1)
+        feat = self.reduce(self.act(self.bn(feat)))
 
-        # ✅ 先 SimAM（局部能量对比，tiny 友好），再 FGlo（全局重标定）
-        joi_feat = self.simam(joi_feat)
-        out = self.F_glo(joi_feat)
+        # True: SimAM / False: Identity
+        feat = self.simam(feat)
 
+        out = self.F_glo(feat)
         return out
+
+
+if __name__ == "__main__":
+    # quick sanity check
+    inp = torch.randn(2, 64, 256, 256)
+
+    m_on = ContextGuidedSimAMConv(64, 128, dilation_rate=2, reduction=16, simam=True)
+    m_off = ContextGuidedSimAMConv(64, 128, dilation_rate=2, reduction=16, simam=False)
+
+    y_on = m_on(inp)
+    y_off = m_off(inp)
+
+    print("on :", y_on.shape)
+    print("off:", y_off.shape)
