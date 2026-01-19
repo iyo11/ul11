@@ -25,14 +25,14 @@ else:
 #config
 epoch_count = 300
 close_mosaic_count = 45
-model_name = "yolo11n_ContextTGuidedConvs_OLB.yaml"
+model_name = "yolo11n_ContextGuidedSimAMConv_ONB.yaml"
 datasets = '/NWPU_VHR.yaml'
 seed = 11
 optimizer = 'SGD'
 amp = False
 patience=0
 pretrained=True
-module_edition="e3"
+module_edition="e4"
 #config end
 
 
