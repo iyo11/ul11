@@ -1,0 +1,60 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# YOLO11n-HEPAN-P2 implementation based on Figure 3
+# Key update: HFCC layer added for channel compression to reduce GFLOPs
+
+# Parameters
+nc: 80 # number of classes
+scales: # model compound scaling constants, i.e. 'n', 's', 'm', 'l', 'x'
+  n: [0.50, 0.25, 1024]
+
+# ---------------- 骨干网络 (BACKBONE) ----------------
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
+  - [-1, 1, C3k2, [256, False, 0.25]] # 2
+  - [-1, 1, Conv, [256, 3, 2]] # 3-P3/8
+  - [-1, 1, C3k2, [512, False, 0.25]] # 4
+  - [-1, 1, Conv, [512, 3, 2]] # 5-P4/16
+  - [-1, 1, C3k2, [512, True]] # 6
+  - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32
+  - [-1, 1, C3k2, [1024, True]] # 8
+  - [-1, 1, SPPF, [1024, 5]] # 9
+  - [-1, 1, C2PSA, [1024]] # 10
+
+# ---------------- 特征融合 (NECK - HEPAN) ----------------
+head:
+  # === (a) HFCC: High-Frequency Channel Compression ===
+  # 这里使用 1x1 Conv 压缩通道，对应图中左侧虚线框部分
+  # 重点：P2和P3通道压缩到 32/64，大幅降低后续 160x160 分辨率下的计算量
+  - [10, 1, Conv, [128, 1, 1]] # 11 P5_compressed (20x20)
+  - [6, 1, Conv, [64, 1, 1]]   # 12 P4_compressed (40x40)
+  - [4, 1, Conv, [32, 1, 1]]   # 13 P3_compressed (80x80)
+  - [2, 1, Conv, [32, 1, 1]]   # 14 P2_compressed (160x160) - 核心降本层
+
+  # === (b) Bidirectional feature fusion ===
+
+  # --- P4 Node Fusion (Blue Circle) ---
+  # Inputs: P4_compressed + P5_up
+  - [11, 1, nn.Upsample, [None, 2, 'nearest']] # 15 P5->P4
+  - [[12, 15], 1, Concat, [1]]                  # 16
+  - [-1, 1, C3k2, [64, False]]                  # 17 -> P4_out (Blue Node Output)
+
+  # --- P3 Node Fusion (Yellow Circle) ---
+  # Inputs: P3_compressed + P4_out_up + P5_up
+  - [11, 1, nn.Upsample, [None, 4, 'nearest']] # 18 P5->P3
+  - [17, 1, nn.Upsample, [None, 2, 'nearest']] # 19 P4->P3
+  - [[13, 19, 18], 1, Concat, [1]]              # 20
+  - [-1, 1, C3k2, [64, False]]                  # 21 -> P3_out (Yellow Node Output)
+
+  # --- P2 Node Fusion (Orange Circle) ---
+  # Inputs: P2_compressed + P3_out_up + P4_out_up + P5_up
+  - [11, 1, nn.Upsample, [None, 8, 'nearest']] # 22 P5->P2
+  - [17, 1, nn.Upsample, [None, 4, 'nearest']] # 23 P4->P2
+  - [21, 1, nn.Upsample, [None, 2, 'nearest']] # 24 P3->P2
+  - [[14, 24, 23, 22], 1, Concat, [1]]          # 25
+  - [-1, 1, C3k2, [64, False]]                  # 26 -> P2_out (Orange Node Output)
+
+
+  # ---------------- 检测头 (DETECT) ----------------
+  - [[26, 21, 17, 11], 1, Detect, [nc]] # Detect(P2, P3, P4, P5)

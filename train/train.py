@@ -25,7 +25,7 @@ else:
 
 epoch_count = 300
 close_mosaic_count = 45
-model_name = "yolo11n.yaml"
+model_name = "yolo11n_HEPAN_P2.yaml"
 datasets = '/NWPU_VHR.yaml'
 seed = 42
 optimizer = 'SGD'
