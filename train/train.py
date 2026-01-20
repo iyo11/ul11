@@ -43,9 +43,9 @@ module = m.group(3) or "base"
 
 dataset_name = Path(datasets).stem
 if module_edition != "e0":
-    run_name = f"{dataset_name}/{version}_seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
+    run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
 else:
-    run_name = f"{dataset_name}/{version}_seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
+    run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
 
 run_dir = save_path / run_name
 ansi_re = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
