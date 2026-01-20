@@ -3,3 +3,5 @@
 /pts/
 /runs/
 /ultralytics.egg-info/
+/.ssh/
+.ssh/
