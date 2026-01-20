@@ -7,15 +7,15 @@ scales:
   x: [1.00, 1.50, 512]
 
 backbone:
-  - [-1, 1, SPDContextGuidedConv, [64]]              # 0
-  - [-1, 1, SPDContextGuidedConv, [128]]             # 1
+  - [-1, 1, Conv, [64, 3, 2]]                        # 0
+  - [-1, 1, ContextGuidedConv, [128]]          # 1
   - [-1, 2, C3k2, [256, False, 0.25]]                # 2
-  - [-1, 1, SPDContextGuidedConv, [256]]                # 3
+  - [-1, 1, ContextGuidedConv, [256]]          # 3
   - [-1, 2, C3k2, [512, False, 0.25]]                # 4
-  - [-1, 1, SPDContextGuidedConv, [512]]                # 5
-  - [-1, 2, C3k2, [512, True]]                       # 6
-  - [-1, 1, SPDContextGuidedConv, [1024]]               # 7
-  - [-1, 2, C3k2, [1024, True]]                      # 8
+  - [-1, 1, ContextGuidedConv, [512]]          # 5
+  - [-1, 2, C3k2_FCA, [512, True]]                       # 6
+  - [-1, 1, ContextGuidedConv, [1024]]         # 7
+  - [-1, 2, C3k2_FCA, [1024, True]]                     # 8
   - [-1, 1, SPPF, [1024, 5]]                         # 9
   - [-1, 2, C2PSA, [1024]]                           # 10
 

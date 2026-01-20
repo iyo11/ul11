@@ -25,14 +25,14 @@ else:
 
 epoch_count = 300
 close_mosaic_count = 45
-model_name = "yolo11n_HEPAN_P2.yaml"
+model_name = "yolo11n_ContextGuidedConv_ONB_C3K2FCA.yaml"
 datasets = '/NWPU_VHR.yaml'
 seed = 42
 optimizer = 'SGD'
 amp = False
 patience = 0
 pretrained = True
-module_edition = "e2"
+module_edition = "e0"
 
 m = re.search(r"^yolo(\d+)([A-Za-z0-9]+)(?:_(.+))?\.yaml$", model_name)
 if not m:
