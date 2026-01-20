@@ -1,4 +1,4 @@
-path: /1/data/NWPU_VHR
+path: ../datas/NWPU_VHR
 train: train/images
 val: valid/images
 test: test/images
