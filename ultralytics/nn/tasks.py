@@ -21,6 +21,7 @@ from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.block.C3K2FCA import C3k2_FCA
 from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv, WTConv2d
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
+from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.upsample.LUMA import LUMA
 
 from ultralytics.nn.add.downSample.ContextGuidedConv import ContextGuidedConv
@@ -1665,6 +1666,10 @@ def parse_model(d, ch, verbose=True):
         elif m in { CARAFE, Converse2D, CEM, ECA, CBAM, CA, GAM }:
             c2 = ch[f]
             args = [c2, *args]
+        elif m in { WFU }:
+            c1 = [ch[x] for x in f]
+            c2 = c1[0]
+            args = [c1]
 
         elif m in base_modules:
             c1, c2 = ch[f], args[0]
