@@ -1,14 +1,10 @@
-import torch.nn as nn
-import pywt
-import pywt.data
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-
-__all__ = ['PWD2d']
-
-from ultralytics.nn.modules import Conv
+import pywt
 
 
+# ... create_wavelet_filter 保持不变 ...
 def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
     w = pywt.Wavelet(wave)
     dec_hi = torch.tensor(w.dec_hi[::-1], dtype=type)
@@ -17,123 +13,71 @@ def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
                                dec_lo.unsqueeze(0) * dec_hi.unsqueeze(1),
                                dec_hi.unsqueeze(0) * dec_lo.unsqueeze(1),
                                dec_hi.unsqueeze(0) * dec_hi.unsqueeze(1)], dim=0)
-
     dec_filters = dec_filters[:, None].repeat(in_size, 1, 1, 1)
-
-    rec_hi = torch.tensor(w.rec_hi[::-1], dtype=type).flip(dims=[0])
-    rec_lo = torch.tensor(w.rec_lo[::-1], dtype=type).flip(dims=[0])
-    rec_filters = torch.stack([rec_lo.unsqueeze(0) * rec_lo.unsqueeze(1),
-                               rec_lo.unsqueeze(0) * rec_hi.unsqueeze(1),
-                               rec_hi.unsqueeze(0) * rec_lo.unsqueeze(1),
-                               rec_hi.unsqueeze(0) * rec_hi.unsqueeze(1)], dim=0)
-
-    rec_filters = rec_filters[:, None].repeat(out_size, 1, 1, 1)
-
-    return dec_filters, rec_filters
+    return dec_filters
 
 
-def wavelet_transform(x, filters):
-    b, c, h, w = x.shape
-    pad = (filters.shape[2] // 2 - 1, filters.shape[3] // 2 - 1)
-    x = F.conv2d(x, filters, stride=2, groups=c, padding=pad)
-    x = x.reshape(b, c, 4, h // 2, w // 2)
-    return x
-
-
-def inverse_wavelet_transform(x, filters):
-    b, c, _, _ = x.shape
-    pad = (filters.shape[2] // 2 - 1, filters.shape[3] // 2 - 1)
-    # x = x.reshape(b, c * 4, h_half, w_half)
-    x = F.conv_transpose2d(x, filters, stride=2, groups=c // 4, padding=pad)
-    return x
-
-
-class _ScaleModule(nn.Module):
-    def __init__(self, dims, init_scale=1.0, init_bias=0):
-        super(_ScaleModule, self).__init__()
-        self.dims = dims
-        self.weight = nn.Parameter(torch.ones(*dims) * init_scale, requires_grad=True)
-        self.bias = None
-
-    def forward(self, x):
-        return torch.mul(self.weight, x)
-
-
-class ChannelAttention(nn.Module):
-    def __init__(self, in_planes, ratio=16):
-        super(ChannelAttention, self).__init__()
+# --- 核心改进：频率门控单元 (FGU) ---
+# 替代 ECA/CA，专门用于从 4C 复杂信号中提取有用信息
+class FrequencyGate(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        # 压缩 - 激励 结构 (类似 SE，但更轻量且带残差)
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.max_pool = nn.AdaptiveMaxPool2d(1)
-        self.fc1 = nn.Conv2d(in_planes, in_planes // 16, 1, bias=False)
-        self.relu1 = nn.ReLU()
-        self.fc2 = nn.Conv2d(in_planes // 16, in_planes, 1, bias=False)
-        self.sigmoid = nn.Sigmoid()
+        self.fc = nn.Sequential(
+            nn.Conv2d(channels, channels // 4, 1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels // 4, channels, 1, bias=False),
+            nn.Sigmoid()
+        )
 
     def forward(self, x):
-        avg_out = self.fc2(self.relu1(self.fc1(self.avg_pool(x))))
-        max_out = self.fc2(self.relu1(self.fc1(self.max_pool(x))))
-        out = avg_out + max_out
-        return self.sigmoid(out)
+        attn = self.fc(self.avg_pool(x))
+        return x * attn
 
 
-class SpatialAttention(nn.Module):
-    def __init__(self, kernel_size=7):
-        super(SpatialAttention, self).__init__()
-        assert kernel_size in (3, 7), 'kernel size must be 3 or 7'
-        padding = 3 if kernel_size == 7 else 1
-        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=padding, bias=False)
-        self.sigmoid = nn.Sigmoid()
+class WTDConv(nn.Module):
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True, wt_type='bior1.3'):
+        super().__init__()
+        self.c1 = c1
 
-    def forward(self, x):
-        avg_out = torch.mean(x, dim=1, keepdim=True)
-        max_out, _ = torch.max(x, dim=1, keepdim=True)
-        x = torch.cat([avg_out, max_out], dim=1)
-        x = self.conv1(x)
-        return self.sigmoid(x)
+        # 1. 语义流 (Base Branch)
+        self.base_conv = nn.Conv2d(c1, c2, 3, 2, 1, bias=False)
+        self.base_bn = nn.BatchNorm2d(c2)
 
+        # 2. 小波流 (Wavelet Branch)
+        filters = create_wavelet_filter(wt_type, c1, c1, torch.float)
+        self.register_buffer('wt_filter', filters)
+        self.wt_pad = (filters.shape[-1] - 2) // 2
 
-class PWD2d(nn.Module):  # 小波+卷积下采样核
-    def __init__(self, in_channels, out_ch, wt_type='db1'):
-        super(PWD2d, self).__init__()
-        out_channels = in_channels * 4
-        # assert in_channels * 4 == out_channels
+        # 3. 关键修改：先降维融合，再做门控
+        # 以前是 4C -> Attention -> Conv(降维)
+        # 现在是 4C -> Conv(降维) -> Gate(筛选) -> 加回
+        # 这样 Attention 处理的是浓缩后的特征，抗噪性更好！
 
-        self.in_channels = in_channels
-        self.wt_filter, self.iwt_filter = create_wavelet_filter(wt_type, in_channels, in_channels, torch.float)
-        self.wt_filter = nn.Parameter(self.wt_filter, requires_grad=False)
+        self.wt_reduce = nn.Sequential(
+            nn.Conv2d(c1 * 4, c2, 1, 1, 0, bias=False),  # 先把 4C 降到 C2
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
 
-        self.para_conv = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels * 4, kernel_size=2, stride=2, groups=in_channels),
-            nn.BatchNorm2d(in_channels * 4),
-            nn.ReLU())  # 分组2*2卷积
-        self.ca = ChannelAttention(out_channels)
+        # 频率门控 (作用在降维后的 C2 通道上)
+        self.gate = FrequencyGate(c2)
 
-        self.wavelet_scale = _ScaleModule([1, in_channels * 4, 1, 1], init_scale=0.1)
-        self.conv1x1 = nn.Conv2d(out_channels, in_channels * 2, kernel_size=1, stride=1)
-        self.bnorm = nn.BatchNorm2d(in_channels * 2)
-        self.act = nn.ReLU()
-        self.conv1 = Conv(in_channels * 2, out_ch, 1)  # 增加一个点卷积，调整最终输出特征图的通道数
+        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
 
     def forward(self, x):
-        curr_x_ll = x
+        # A. 基础语义
+        x_base = self.base_bn(self.base_conv(x))
 
-        x = self.para_conv(x)
-        ca = self.ca(x)
-        x = x * ca
+        # B. 小波提取
+        x_wt = F.conv2d(x, self.wt_filter, stride=2, groups=self.c1, padding=self.wt_pad)
 
-        curr_shape = curr_x_ll.shape
-        if (curr_shape[2] % 2 > 0) or (curr_shape[3] % 2 > 0):
-            curr_pads = (0, curr_shape[3] % 2, 0, curr_shape[2] % 2)
-            curr_x_ll = F.pad(curr_x_ll, curr_pads)
+        # C. 降维融合 (先把 4个频带的信息揉在一起)
+        x_wt = self.wt_reduce(x_wt)
 
-        curr_x = wavelet_transform(curr_x_ll, self.wt_filter)
-        shape_x = curr_x.shape
-        curr_x_wt = curr_x.reshape(shape_x[0], shape_x[1] * 4, shape_x[3], shape_x[4])
+        # D. 门控筛选 (在融合后的特征中，筛选出对当前任务重要的通道)
+        x_wt = self.gate(x_wt)
 
-        curr_x_wt = curr_x_wt * ca
-        curr_x_wt = self.wavelet_scale(curr_x_wt)
-
-        out = x + curr_x_wt
-        out = self.act(self.bnorm(self.conv1x1(out)))
-
-        return self.conv1(out)
+        # E. 残差相加
+        return self.act(x_base + x_wt)
