@@ -1,5 +1,3 @@
-# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
-
 import contextlib
 import pickle
 import re
@@ -10,25 +8,32 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
+
+from ultralytics.nn.add.attention.CA import CA
+from ultralytics.nn.add.attention.CBAM import CBAM
+from ultralytics.nn.add.attention.ECA import ECA
 from ultralytics.nn.add.attention.CEM import CEM
+from ultralytics.nn.add.attention.GAM import GAM
+
 from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
-from ultralytics.nn.add.attention.MSGatedSimAM import MSGatedSimAM
 from ultralytics.nn.add.block.C3K2FCA import C3k2_FCA
-from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv
+from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv, WTConv2d
+from ultralytics.nn.add.downSample.PWDConv import PWD2d
+from ultralytics.nn.improve.upsample.LUMA import LUMA
+from ultralytics.nn.add.downSample import WTConv
 
 from ultralytics.nn.add.downSample.ContextGuidedConv import ContextGuidedConv
 from ultralytics.nn.add.downSample.SPDConv import SPDConv
-from ultralytics.nn.add.downSample.WTConv import WTConv2d
 
 from ultralytics.nn.add.upsample.CARAFE import CARAFE
 from ultralytics.nn.add.upsample.Converse2D import Converse2D
 from ultralytics.nn.add.upsample.DySample import DySample
-from ultralytics.nn.add.upsample.LUMA import LUMA
-from ultralytics.nn.add.upsample.LUMCA import LUMACA
 from ultralytics.nn.add.upsample.SCEU import SCEU
+
 from ultralytics.nn.autobackend import check_class_names
+
 from ultralytics.nn.modules import (
     AIFI,
     C1,
@@ -1602,19 +1607,22 @@ def parse_model(d, ch, verbose=True):
             A2C2f,
             ContextGuidedConv,
             CrossAxisAttention,
-            LUMA,
-            LUMACA,
             FCAttention,
             C3k2_FCA,
             SCEU,
             SPDConv,
-            MSGatedSimAM,
             CoordinateAttention,
             WTConv2d,
-            C3k2_WTConv
+            C3k2_WTConv,
+            LUMA,
+            CA,
+            CBAM,
+            ECA,
+            GAM,
+            PWD2d
         }
     )
-    repeat_modules = frozenset(  # modules with 'repeat' arguments
+    repeat_modules = frozenset(
         {
             BottleneckCSP,
             C1,
@@ -1635,7 +1643,8 @@ def parse_model(d, ch, verbose=True):
             C3k2_FCA,
             SPDConv,
             WTConv2d,
-            C3k2_WTConv
+            C3k2_WTConv,
+            PWD2d
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -1652,10 +1661,10 @@ def parse_model(d, ch, verbose=True):
                     args[j] = locals()[a] if a in locals() else ast.literal_eval(a)
         n = n_ = max(round(n * depth), 1) if n > 1 else n  # depth gain
 
-        if m in { LUMA,LUMACA }:
+        if m in { LUMA }:
             c2 = ch[f]
             args = [c2, c2, *args]  # 自动将输入、输出通道设为一致s
-        elif m in { CARAFE,Converse2D,CEM }:
+        elif m in { CARAFE, Converse2D, CEM, ECA, CBAM, CA, GAM }:
             c2 = ch[f]
             args = [c2, *args]
 

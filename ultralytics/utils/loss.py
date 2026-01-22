@@ -8,6 +8,7 @@ from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import BCEWithLogitsLoss
 
 from ultralytics.utils.metrics import OKS_SIGMA, RLE_WEIGHT
 from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh
@@ -16,6 +17,7 @@ from ultralytics.utils.torch_utils import autocast
 
 from .metrics import bbox_iou, probiou
 from .tal import bbox2dist, rbox2dist
+from ..nn.add.loss.AdaFocalLoss import AdaFocalLoss
 
 
 class VarifocalLoss(nn.Module):
@@ -300,6 +302,8 @@ class BCEDiceLoss(nn.Module):
         super().__init__()
         self.weight_bce = weight_bce
         self.weight_dice = weight_dice
+
+        #修改了LOSS
         self.bce = nn.BCEWithLogitsLoss()
         self.dice = MultiChannelDiceLoss(smooth=1)
 
@@ -339,7 +343,12 @@ class v8DetectionLoss:
         h = model.args  # hyperparameters
 
         m = model.model[-1]  # Detect() module
+
+
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        #修改LOSS
+        #self.bce = AdaFocalLoss(nn.BCEWithLogitsLoss(reduction="none"))
+
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes

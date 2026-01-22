@@ -1,32 +1,31 @@
 import re
 import sys
 import warnings
+import platform
 from pathlib import Path
+from ultralytics import YOLO
 
 warnings.simplefilter("ignore")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-from ultralytics import YOLO
-
 base_path = Path(__file__).resolve().parent.parent
 save_path = base_path / "runs"
 
-import platform
 if platform.system() == 'Windows':
-    datasets_path = '../datasets_local'
+    datasets_root = Path('../datasets_local')
     batch_size = 8
     workers = 4
     cacheTF = False
 else:
-    datasets_path = '../datasets'
+    datasets_root = Path('../datasets')
     batch_size = 24
     workers = 10
     cacheTF = True
 
 epoch_count = 300
 close_mosaic_count = 45
-model_name = "yolo11n_ContextGuidedConv_ONB_C3K2WT.yaml"
-datasets = '/NWPU_VHR.yaml'
+model_name = "yolo11n_GAM.yaml"
+dataset_yaml = '/NWPU_VHR.yaml'
 seed = 42
 optimizer = 'SGD'
 amp = False
@@ -40,77 +39,77 @@ if not m:
 version = m.group(1)
 variant = m.group(2)
 module = m.group(3) or "base"
-
-dataset_name = Path(datasets).stem
+dataset_name = Path(dataset_yaml).stem
 if module_edition != "e0":
     run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
 else:
     run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
 
 run_dir = save_path / run_name
-ansi_re = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
-_stdout_orig = sys.stdout
-_stderr_orig = sys.stderr
-_stdout_write_orig = sys.stdout.write
-_stderr_write_orig = sys.stderr.write
+class DualLogger:
+    def __init__(self, filename, stream):
+        self.terminal = stream
+        self.log = open(filename, 'a', encoding='utf-8')
+        self.ansi_re = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")  # 用于去除控制台颜色代码
+    def write(self, message):
+        # 1. 打印到屏幕
+        self.terminal.write(message)
+        self.terminal.flush()
+        # 2. 写入到文件 (去除颜色代码)
+        clean_msg = self.ansi_re.sub("", message)
+        # 过滤逻辑：忽略刷屏的进度条（带 \r），只记录最终完成的（带 100%）
+        if "\r" not in clean_msg or "100%" in clean_msg:
+            self.log.write(clean_msg.replace("\r", ""))
+            self.log.flush()  # 【关键】强制写入硬盘
 
-_buf = []
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
 
-sys.stdout.write = lambda s, _ow=_stdout_write_orig, _b=_buf, _ar=ansi_re: (
-    _ow(s),
-    (
-        (lambda t:
-            _b.append(t.replace("\r", "")) if ("100%" in t)
-            else (None if ("\r" in t) else _b.append(t))
-        )(_ar.sub("", s))
-    )
-)[0]
+    def close(self):
+        self.log.close()
 
-sys.stderr.write = lambda s, _ow=_stderr_write_orig, _b=_buf, _ar=ansi_re: (
-    _ow(s),
-    (
-        (lambda t:
-            _b.append(t.replace("\r", "")) if ("100%" in t)
-            else (None if ("\r" in t) else _b.append(t))
-        )(_ar.sub("", s))
-    )
-)[0]
+if __name__ == '__main__':
+    run_dir.mkdir(parents=True, exist_ok=True)
+    log_path = run_dir / "run.log"
+    print(f"LOG SAVE PATH: {log_path}")
+    sys.stdout = DualLogger(log_path, sys.stdout)
+    sys.stderr = DualLogger(log_path, sys.stderr)
 
+    try:
+        model_cfg = Path("..") / "models" / version / model_name
+        data_path = str(datasets_root) + dataset_yaml
+        model = YOLO(str(model_cfg))
+        results = model.train(
+            data=data_path,
+            cache=cacheTF,
+            imgsz=640,
+            epochs=epoch_count,
+            single_cls=False,
+            batch=batch_size,
+            pretrained=pretrained,
+            close_mosaic=close_mosaic_count,
+            mosaic=1.0,
+            workers=workers,
+            device='0',
+            optimizer=optimizer,
+            resume=False,
+            amp=amp,
+            patience=patience,
+            project=str(save_path),
+            name=run_name,
+            seed=seed,
+            exist_ok=True
+        )
+        print(f"LOG SAVE PATH: {log_path}")
+    except Exception as e:
+        print(f"ERROR: {e}")
+        raise e
 
-model_cfg = Path("..") / "models" / version / model_name
-model = YOLO(str(model_cfg))
-
-results = model.train(
-    data=datasets_path + datasets,
-    cache=cacheTF,
-    imgsz=640,
-    epochs=epoch_count,
-    single_cls=False,
-    batch=batch_size,
-    pretrained=pretrained,
-    close_mosaic=close_mosaic_count,
-    mosaic=1.0,
-    workers=workers,
-    device='0',
-    optimizer=optimizer,
-    resume=False,
-    amp=amp,
-    patience=patience,
-    project=str(save_path),
-    name=run_name,
-    seed=seed
-)
-
-sys.stdout.write = _stdout_write_orig
-sys.stderr.write = _stderr_write_orig
-sys.stdout = _stdout_orig
-sys.stderr = _stderr_orig
-
-save_dir = Path(getattr(results, "save_dir", run_dir))
-log_path = save_dir / "run.log"
-
-with open(log_path, "w", encoding="utf-8", errors="ignore") as f:
-    f.writelines(_buf)
-
-print(f"[OK] run.log saved to: {log_path}")
+    finally:
+        # 恢复标准输出流
+        sys.stdout.close()
+        sys.stderr.close()
+        sys.stdout = sys.stdout.terminal
+        sys.stderr = sys.stderr.terminal
