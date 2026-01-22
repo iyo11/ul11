@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import pywt
 
 
-# ... create_wavelet_filter 保持不变 ...
 def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
     w = pywt.Wavelet(wave)
     dec_hi = torch.tensor(w.dec_hi[::-1], dtype=type)
@@ -17,12 +16,9 @@ def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
     return dec_filters
 
 
-# --- 核心改进：频率门控单元 (FGU) ---
-# 替代 ECA/CA，专门用于从 4C 复杂信号中提取有用信息
 class FrequencyGate(nn.Module):
     def __init__(self, channels):
         super().__init__()
-        # 压缩 - 激励 结构 (类似 SE，但更轻量且带残差)
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Conv2d(channels, channels // 4, 1, bias=False),
