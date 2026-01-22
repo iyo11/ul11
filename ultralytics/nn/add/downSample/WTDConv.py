@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import pywt
 
 
+# ... create_wavelet_filter 保持不变 ...
 def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
     w = pywt.Wavelet(wave)
     dec_hi = torch.tensor(w.dec_hi[::-1], dtype=type)
@@ -16,103 +17,67 @@ def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
     return dec_filters
 
 
-class ScaleModule(nn.Module):
-    def __init__(self, channels, init_scale=1.0):
+# --- 核心改进：频率门控单元 (FGU) ---
+# 替代 ECA/CA，专门用于从 4C 复杂信号中提取有用信息
+class FrequencyGate(nn.Module):
+    def __init__(self, channels):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(1, channels, 1, 1) * init_scale)
+        # 压缩 - 激励 结构 (类似 SE，但更轻量且带残差)
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Conv2d(channels, channels // 4, 1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels // 4, channels, 1, bias=False),
+            nn.Sigmoid()
+        )
 
     def forward(self, x):
-        return x * self.weight
+        attn = self.fc(self.avg_pool(x))
+        return x * attn
 
 
-# --- 核心组件：坐标注意力 (Coordinate Attention) ---
-class CoordAtt(nn.Module):
-    def __init__(self, inp, oup, reduction=32):
-        super(CoordAtt, self).__init__()
-        # 降维比例，针对小模型可以适当减小 reduction 以保留更多信息
-        mip = max(8, inp // reduction)
-
-        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))  # Y轴池化 -> 捕捉水平特征
-        self.pool_w = nn.AdaptiveAvgPool2d((1, None))  # X轴池化 -> 捕捉垂直特征
-
-        self.conv1 = nn.Conv2d(inp, mip, kernel_size=1, stride=1, padding=0)
-        self.bn1 = nn.BatchNorm2d(mip)
-        self.act = nn.SiLU()  # 使用 SiLU 激活
-
-        self.conv_h = nn.Conv2d(mip, oup, kernel_size=1, stride=1, padding=0)
-        self.conv_w = nn.Conv2d(mip, oup, kernel_size=1, stride=1, padding=0)
-
-    def forward(self, x):
-        identity = x
-        n, c, h, w = x.size()
-
-        # 1. 分别沿 H 和 W 方向池化
-        x_h = self.pool_h(x)
-        x_w = self.pool_w(x).permute(0, 1, 3, 2)
-
-        # 2. 拼接并降维处理 (捕捉跨方向的相关性)
-        y = torch.cat([x_h, x_w], dim=2)
-        y = self.conv1(y)
-        y = self.bn1(y)
-        y = self.act(y)
-
-        # 3. 拆分并恢复通道
-        x_h, x_w = torch.split(y, [h, w], dim=2)
-        x_w = x_w.permute(0, 1, 3, 2)
-
-        # 4. 生成注意力权重
-        a_h = self.conv_h(x_h).sigmoid()
-        a_w = self.conv_w(x_w).sigmoid()
-
-        # 5. 双向加权
-        out = identity * a_w * a_h
-        return out
-
-
-# --- 结合体：WTDConv + Residual + CA ---
 class WTDConv(nn.Module):
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True, wt_type='bior1.3'):
         super().__init__()
-        # 1. 基础卷积分支 (负责语义 + Recall)
+        self.c1 = c1
+
+        # 1. 语义流 (Base Branch)
         self.base_conv = nn.Conv2d(c1, c2, 3, 2, 1, bias=False)
         self.base_bn = nn.BatchNorm2d(c2)
 
-        # 2. 小波分支 (负责边缘 + Precision)
+        # 2. 小波流 (Wavelet Branch)
         filters = create_wavelet_filter(wt_type, c1, c1, torch.float)
         self.register_buffer('wt_filter', filters)
-        k_wt = filters.shape[-1]
-        self.wt_pad = (k_wt - 2) // 2
+        self.wt_pad = (filters.shape[-1] - 2) // 2
 
-        # Scale层：依然保留，用于软性调节频带权重
-        self.scale = ScaleModule(c1 * 4, init_scale=1.5)
+        # 3. 关键修改：先降维融合，再做门控
+        # 以前是 4C -> Attention -> Conv(降维)
+        # 现在是 4C -> Conv(降维) -> Gate(筛选) -> 加回
+        # 这样 Attention 处理的是浓缩后的特征，抗噪性更好！
 
-        # === 核心升级：使用 CoordAtt 替换 ECA ===
-        # 小波后的通道数是 4*c1，reduction设为16保证计算量不大
-        self.attn = CoordAtt(c1 * 4, c1 * 4, reduction=16)
-
-        # 融合层
-        if p is None: p = k // 2
-        self.wt_process = nn.Sequential(
-            nn.Conv2d(c1 * 4, c2, k, s, p, g, bias=False),
-            nn.BatchNorm2d(c2)
+        self.wt_reduce = nn.Sequential(
+            nn.Conv2d(c1 * 4, c2, 1, 1, 0, bias=False),  # 先把 4C 降到 C2
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
         )
+
+        # 频率门控 (作用在降维后的 C2 通道上)
+        self.gate = FrequencyGate(c2)
 
         self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
 
     def forward(self, x):
-        # A. 稳健的语义特征
+        # A. 基础语义
         x_base = self.base_bn(self.base_conv(x))
 
-        # B. 精细的频域特征
-        x_wt = F.conv2d(x, self.wt_filter, stride=2, groups=x.shape[1], padding=self.wt_pad)
-        x_wt = self.scale(x_wt)  # 频带加权
+        # B. 小波提取
+        x_wt = F.conv2d(x, self.wt_filter, stride=2, groups=self.c1, padding=self.wt_pad)
 
-        # C. 坐标注意力增强 (精准定位小目标位置)
-        # 这里会分别强化 X轴 和 Y轴 上有目标的区域，非常适合极小目标
-        x_wt = self.attn(x_wt)
+        # C. 降维融合 (先把 4个频带的信息揉在一起)
+        x_wt = self.wt_reduce(x_wt)
 
-        # D. 降维
-        x_wt = self.wt_process(x_wt)
+        # D. 门控筛选 (在融合后的特征中，筛选出对当前任务重要的通道)
+        x_wt = self.gate(x_wt)
 
-        # E. 残差融合
+        # E. 残差相加
         return self.act(x_base + x_wt)
