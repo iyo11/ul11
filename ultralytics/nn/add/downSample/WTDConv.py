@@ -26,40 +26,48 @@ class ScaleModule(nn.Module):
 
 
 class WTDConv(nn.Module):
+    """
+    混合增强版：并行使用普通卷积和小波卷积。
+    既保留了普通卷积的纹理捕捉能力（保Recall），又利用小波增强边缘（提Precision）。
+    """
+
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True, wt_type='bior1.3'):
         super().__init__()
-        self.c1 = c1
+        # 1. 正常的下采样卷积 (保底，负责纹理和语义)
+        # 注意：这里用 k=3, s=2 的标准卷积
+        self.base_conv = nn.Conv2d(c1, c2, 3, 2, 1, bias=False)
+        self.base_bn = nn.BatchNorm2d(c2)
 
-        # 1. 初始化小波核
+        # 2. 小波分支 (负责提取细微边缘和去噪)
         filters = create_wavelet_filter(wt_type, c1, c1, torch.float)
         self.register_buffer('wt_filter', filters)
-
-        # --- 核心修复：动态计算 Padding ---
-        # 获取生成的小波核大小 (bior1.3 是 6, db1 是 2, db2 是 4)
         k_wt = filters.shape[-1]
-        # 计算 padding 以保证 H_out = H_in / 2
         self.wt_pad = (k_wt - 2) // 2
 
-        # 2. Scale 模块
-        self.scale = ScaleModule(c1 * 4)
-
-        # 3. Attention 模块
+        self.scale = ScaleModule(c1 * 4, init_scale=1.5)  # 初始化稍微大点
         self.attn = ECA(c1 * 4)
 
-        # 4. 融合卷积 (处理 p=None 的情况)
-        if p is None:
-            p = k // 2
-        self.conv = nn.Conv2d(c1 * 4, c2, k, s, p, g, bias=False)
-        self.bn = nn.BatchNorm2d(c2)
+        # 融合层 (降维)
+        if p is None: p = k // 2
+        self.wt_process = nn.Sequential(
+            nn.Conv2d(c1 * 4, c2, k, s, p, g, bias=False),
+            nn.BatchNorm2d(c2)
+        )
+
         self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
 
     def forward(self, x):
-        y = F.conv2d(x, self.wt_filter, stride=2, groups=self.c1, padding=self.wt_pad)
+        # 分支 A: 传统卷积 (稳)
+        x_base = self.base_bn(self.base_conv(x))
 
-        y = self.scale(y)
-        y = self.attn(y)
-        return self.act(self.bn(self.conv(y)))
+        # 分支 B: 小波增强 (细)
+        x_wt = F.conv2d(x, self.wt_filter, stride=2, groups=x.shape[1], padding=self.wt_pad)
+        x_wt = self.scale(x_wt)
+        x_wt = self.attn(x_wt)
+        x_wt = self.wt_process(x_wt)
 
+        # 融合：直接相加
+        return self.act(x_base + x_wt)
 
 # 简单的 ECA 模块 (保持不变)
 class ECA(nn.Module):
