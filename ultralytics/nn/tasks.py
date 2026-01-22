@@ -21,7 +21,6 @@ from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.block.C3K2FCA import C3k2_FCA
 from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv, WTConv2d
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
-from ultralytics.nn.add.downSample.WTDConv import WTDConv
 from ultralytics.nn.improve.upsample.LUMA import LUMA
 
 from ultralytics.nn.add.downSample.ContextGuidedConv import ContextGuidedConv
@@ -1619,8 +1618,7 @@ def parse_model(d, ch, verbose=True):
             CBAM,
             ECA,
             GAM,
-            PWD2d,
-            WTDConv
+            PWD2d
         }
     )
     repeat_modules = frozenset(
@@ -1644,8 +1642,7 @@ def parse_model(d, ch, verbose=True):
             C3k2_FCA,
             SPDConv,
             WTConv2d,
-            C3k2_WTConv,
-            WTDConv
+            C3k2_WTConv
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
