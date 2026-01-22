@@ -32,56 +32,52 @@ class SimAM(nn.Module):
         return x * self.activaton(y)
 
 
-# 3. 终极版下采样模块
 class WTDConv(nn.Module):
     """
-    WT_SimAM_Down:
-    1. 小波变换提供丰富的频域信息 (无损下采样)。
-    2. 普通卷积提供基础语义。
-    3. SimAM 提供基于能量的 3D 注意力，精准定位小目标。
+    WT_SimAM_Down (640p 优化版)
+    针对低分辨率，增加了 Learnable ResScale，防止小波特征在深层被稀释。
     """
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True, wt_type='bior1.3'):
         super().__init__()
         self.c1 = c1
 
-        # --- 分支 1: 基础卷积 (Base) ---
-        # 负责提取常规语义，保底作用
+        # 1. 基础语义分支 (保持语义连贯)
         self.base_conv = nn.Conv2d(c1, c2, 3, 2, 1, bias=False)
         self.base_bn = nn.BatchNorm2d(c2)
 
-        # --- 分支 2: 小波变换 (Detail) ---
+        # 2. 小波细节分支
         filters = create_wavelet_filter(wt_type, c1, c1, torch.float)
         self.register_buffer('wt_filter', filters)
         k_wt = filters.shape[-1]
         self.wt_pad = (k_wt - 2) // 2
 
-        # 降维层：把小波的 4C 通道 映射回 C2
-        # 这里不加 BN/Act，保持原始频率特征进入 Attention
+        # 降维：将 4倍通道 降维到 C2
         self.wt_reduce = nn.Conv2d(c1 * 4, c2, 1, 1, 0, bias=False)
+        self.wt_bn = nn.BatchNorm2d(c2)  # 加个BN稳一点
 
-        # --- 核心: SimAM 注意力 ---
-        # 作用于融合后的特征，寻找"能量"最高的像素(即目标)
+        # 3. SimAM 注意力
         self.simam = SimAM()
 
-        # --- 最终融合 ---
+        # 4. [关键修改] 可学习的融合权重
+        # 在640p下，让网络自己决定听"语义"的还是听"细节"的
+        self.alpha = nn.Parameter(torch.ones(1) * 0.5)
+
         self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
 
     def forward(self, x):
-        # 1. 语义流 (Base Semantic)
+        # 分支 A: 语义 (Semantic)
         x_base = self.base_bn(self.base_conv(x))
 
-        # 2. 频率流 (Frequency Detail)
+        # 分支 B: 细节 (Detail)
         x_wt = F.conv2d(x, self.wt_filter, stride=2, groups=self.c1, padding=self.wt_pad)
-        x_wt = self.wt_reduce(x_wt)  # [B, 4C, H/2, W/2] -> [B, C2, H/2, W/2]
+        x_wt = self.wt_bn(self.wt_reduce(x_wt))
 
-        # 3. 融合 (Add) - 信息互补
-        # 此时 x_fuse 既有语义又有高频边缘
-        x_fuse = x_base + x_wt
+        # SimAM 激活：先对细节做一次能量筛选
+        x_wt = self.simam(x_wt)
 
-        # 4. 激活 (SimAM Attention)
-        # SimAM 会自动评估每个像素的能量，抑制背景(低能量)，激活目标(高能量)
-        # 它比 ReLU/SiLU 更适合做特征筛选
-        out = self.simam(x_fuse)
+        # 融合：带权重的残差连接
+        # 如果 alpha 学出来比较大，说明小波细节很重要
+        out = x_base + self.alpha * x_wt
 
         return self.act(out)
