@@ -1,17 +1,14 @@
-import torch.nn as nn
-import torch
-from einops import rearrange
 import math
+import torch
+import torch.nn as nn
+from einops import rearrange
 
-__all__ = ['AKC3k2']
-
-from ultralytics.nn.modules import C3, C2f
+__all__ = ['C3k2_AKConv']
 
 
 class AKConv(nn.Module):
-    def __init__(self, inc, outc, num_param, stride=1, bias=None):
+    def __init__(self, inc, outc, num_param=2, stride=1, bias=None):
         super(AKConv, self).__init__()
-
         self.num_param = num_param
         self.stride = stride
         self.conv = nn.Sequential(nn.Conv2d(inc, outc, kernel_size=(num_param, 1), stride=(num_param, 1), bias=bias),
@@ -79,13 +76,13 @@ class AKConv(nn.Module):
         mod_number = self.num_param % base_int
         p_n_x, p_n_y = torch.meshgrid(
             torch.arange(0, row_number),
-            torch.arange(0, base_int), indexing='xy')
+            torch.arange(0, base_int))
         p_n_x = torch.flatten(p_n_x)
         p_n_y = torch.flatten(p_n_y)
         if mod_number > 0:
             mod_p_n_x, mod_p_n_y = torch.meshgrid(
                 torch.arange(row_number, row_number + 1),
-                torch.arange(0, mod_number), indexing='xy')
+                torch.arange(0, mod_number))
 
             mod_p_n_x = torch.flatten(mod_p_n_x)
             mod_p_n_y = torch.flatten(mod_p_n_y)
@@ -98,7 +95,7 @@ class AKConv(nn.Module):
     def _get_p_0(self, h, w, N, dtype):
         p_0_x, p_0_y = torch.meshgrid(
             torch.arange(0, h * self.stride, self.stride),
-            torch.arange(0, w * self.stride, self.stride), indexing='xy')
+            torch.arange(0, w * self.stride, self.stride))
 
         p_0_x = torch.flatten(p_0_x).view(1, 1, h, w).repeat(1, N, 1, 1)
         p_0_y = torch.flatten(p_0_y).view(1, 1, h, w).repeat(1, N, 1, 1)
@@ -126,11 +123,7 @@ class AKConv(nn.Module):
         # (b, h, w, N)
         index = q[..., :N] * padded_w + q[..., N:]  # offset_x*w + offset_y
         # (b, c, h*w*N)
-
         index = index.contiguous().unsqueeze(dim=1).expand(-1, c, -1, -1, -1).contiguous().view(b, c, -1)
-
-        # 根据实际情况调整
-        index = index.clamp(min=0, max=x.shape[-1] - 1)
 
         x_offset = x.gather(dim=-1, index=index).contiguous().view(b, c, h, w, N)
 
@@ -148,6 +141,20 @@ class AKConv(nn.Module):
 
         x_offset = rearrange(x_offset, 'b c h w n -> b c (h n) w')
         return x_offset
+
+
+class Bottleneck(nn.Module):
+    # Standard bottleneck with DCN
+    def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):  # ch_in, ch_out, shortcut, groups, kernels, expand
+        super().__init__()
+        c_ = int(c2 * e)  # hidden channels
+
+        self.cv1 = Conv(c1, c_, k[0], 1)
+        self.cv2 = AKConv(c_, c2, 3)
+        self.add = shortcut and c1 == c2
+
+    def forward(self, x):
+        return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -179,168 +186,76 @@ class Conv(nn.Module):
         return self.act(self.conv(x))
 
 
-class Bottleneck(nn.Module):
-    """Standard bottleneck."""
+class C2f(nn.Module):
+    """Faster Implementation of CSP Bottleneck with 2 convolutions."""
 
-    def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
-        """Initializes a bottleneck module with given input/output channels, shortcut option, group, kernels, and
-        expansion.
-        """
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
+        """Initializes a CSP bottleneck with 2 convolutions and n Bottleneck blocks for faster processing."""
+        super().__init__()
+        self.c = int(c2 * e)  # hidden channels
+        self.cv1 = Conv(c1, 2 * self.c, 1, 1)
+        self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
+        self.m = nn.ModuleList(Bottleneck(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
+
+    def forward(self, x):
+        """Forward pass through C2f layer."""
+        y = list(self.cv1(x).chunk(2, 1))
+        y.extend(m(y[-1]) for m in self.m)
+        return self.cv2(torch.cat(y, 1))
+
+    def forward_split(self, x):
+        """Forward pass using split() instead of chunk()."""
+        y = list(self.cv1(x).split((self.c, self.c), 1))
+        y.extend(m(y[-1]) for m in self.m)
+        return self.cv2(torch.cat(y, 1))
+
+
+class C3(nn.Module):
+    """CSP Bottleneck with 3 convolutions."""
+
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
+        """Initialize the CSP Bottleneck with given channels, number, shortcut, groups, and expansion values."""
         super().__init__()
         c_ = int(c2 * e)  # hidden channels
-        self.cv1 = Conv(c1, c_, k[0], 1)
-        self.cv2 = AKConv(c_, c2, k[1], 1, g)
-        self.add = shortcut and c1 == c2
+        self.cv1 = Conv(c1, c_, 1, 1)
+        self.cv2 = Conv(c1, c_, 1, 1)
+        self.cv3 = Conv(2 * c_, c2, 1)  # optional act=FReLU(c2)
+        self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, k=((1, 1), (3, 3)), e=1.0) for _ in range(n)))
 
     def forward(self, x):
-        """'forward()' applies the YOLO FPN to input data."""
-        return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
+        """Forward pass through the CSP bottleneck with 2 convolutions."""
+        return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
 
 
-# YOLOV13改进
-class DSConv(nn.Module):
-    """The Basic Depthwise Separable Convolution."""
+class C3k(C3):
+    """C3k is a CSP bottleneck module with customizable kernel sizes for feature extraction in neural networks."""
 
-    def __init__(self, c_in, c_out, k=3, s=1, p=None, d=1, bias=False):
-        super().__init__()
-        if p is None:
-            p = (d * (k - 1)) // 2
-        self.dw = nn.Conv2d(
-            c_in, c_in, kernel_size=k, stride=s,
-            padding=p, dilation=d, groups=c_in, bias=bias
-        )
-        self.pw = nn.Conv2d(c_in, c_out, 1, 1, 0, bias=bias)
-        self.bn = nn.BatchNorm2d(c_out)
-        self.act = nn.SiLU()
-
-    def forward(self, x):
-        x = self.dw(x)
-        x = self.pw(x)
-        return self.act(self.bn(x))
-
-
-class DSBottleneck_AKConv(nn.Module):
-    """
-    An improved bottleneck block using depthwise separable convolutions (DSConv).
-    This class implements a lightweight bottleneck module that replaces standard convolutions with depthwise
-    separable convolutions to reduce parameters and computational cost.
-    Attributes:
-        c1 (int): Number of input channels.
-        c2 (int): Number of output channels.
-        shortcut (bool, optional): Whether to use a residual shortcut connection. The connection is only added if c1 == c2. Defaults to True.
-        e (float, optional): Expansion ratio for the intermediate channels. Defaults to 0.5.
-        k1 (int, optional): Kernel size for the first DSConv layer. Defaults to 3.
-        k2 (int, optional): Kernel size for the second DSConv layer. Defaults to 5.
-        d2 (int, optional): Dilation for the second DSConv layer. Defaults to 1.
-    Methods:
-        forward: Performs a forward pass through the DSBottleneck module.
-    Examples:
-        >>> import torch
-        >>> model = DSBottleneck(c1=64, c2=64, shortcut=True)
-        >>> x = torch.randn(2, 64, 32, 32)
-        >>> output = model(x)
-        >>> print(output.shape)
-        torch.Size([2, 64, 32, 32])
-    """
-
-    def __init__(self, c1, c2, shortcut=True, e=0.5, k1=3, k2=5, d2=1):
-        super().__init__()
-        c_ = int(c2 * e)
-        # self.cv1 = DSConv(c1, c_, k1, s=1, p=None, d=1)
-        # self.cv2 = DSConv(c_, c2, k2, s=1, p=None, d=d2)
-        self.cv1 = AKConv(c1, c_, k1, 1)  # 在这里可以替换一种DSConv，也可以都替换。自己可以做一下消融实验
-        self.cv2 = AKConv(c_, c2, k1, 1)
-        self.add = shortcut and c1 == c2
-
-    def forward(self, x):
-        y = self.cv2(self.cv1(x))
-        return x + y if self.add else y
-
-
-class DSC3k_AKConv(C3):
-    """
-    An improved C3k module using DSBottleneck blocks for lightweight feature extraction.
-    This class extends the C3 module by replacing its standard bottleneck blocks with DSBottleneck blocks,
-    which use depthwise separable convolutions.
-    Attributes:
-        c1 (int): Number of input channels.
-        c2 (int): Number of output channels.
-        n (int, optional): Number of DSBottleneck blocks to stack. Defaults to 1.
-        shortcut (bool, optional): Whether to use shortcut connections within the DSBottlenecks. Defaults to True.
-        g (int, optional): Number of groups for grouped convolution (passed to parent C3). Defaults to 1.
-        e (float, optional): Expansion ratio for the C3 module's hidden channels. Defaults to 0.5.
-        k1 (int, optional): Kernel size for the first DSConv in each DSBottleneck. Defaults to 3.
-        k2 (int, optional): Kernel size for the second DSConv in each DSBottleneck. Defaults to 5.
-        d2 (int, optional): Dilation for the second DSConv in each DSBottleneck. Defaults to 1.
-    Methods:
-        forward: Performs a forward pass through the DSC3k module (inherited from C3).
-    Examples:
-        >>> import torch
-        >>> model = DSC3k(c1=128, c2=128, n=2, k1=3, k2=7)
-        >>> x = torch.randn(2, 128, 64, 64)
-        >>> output = model(x)
-        >>> print(output.shape)
-        torch.Size([2, 128, 64, 64])
-    """
-
-    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5, k1=3, k2=5, d2=1):
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5, k=3):
+        """Initializes the C3k module with specified channels, number of layers, and configurations."""
         super().__init__(c1, c2, n, shortcut, g, e)
-        c_ = int(c2 * e)
+        c_ = int(c2 * e)  # hidden channels
+        # self.m = nn.Sequential(*(RepBottleneck(c_, c_, shortcut, g, k=(k, k), e=1.0) for _ in range(n)))
+        self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, k=(k, k), e=1.0) for _ in range(n)))
 
-        self.m = nn.Sequential(
-            *(
-                DSBottleneck_AKConv(
-                    c_, c_,
-                    shortcut=shortcut,
-                    e=1.0,
-                    k1=k1,
-                    k2=k2,
-                    d2=d2
-                )
-                for _ in range(n)
-            )
+
+class C3k2_AKConv(C2f):
+    """Faster Implementation of CSP Bottleneck with 2 convolutions."""
+
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        """Initializes the C3k2 module, a faster CSP Bottleneck with 2 convolutions and optional C3k blocks."""
+        super().__init__(c1, c2, n, shortcut, g, e)
+        self.m = nn.ModuleList(
+            C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g) for _ in range(n)
         )
 
 
-# class DSC3k2(C2f):
-class AKC3k2(C2f):
-    """
-    An improved C3k2 module that uses lightweight depthwise separable convolution blocks.
-    This class redesigns C3k2 module, replacing its internal processing blocks with either DSBottleneck
-    or DSC3k modules.
-    Attributes:
-        c1 (int): Number of input channels.
-        c2 (int): Number of output channels.
-        n (int, optional): Number of internal processing blocks to stack. Defaults to 1.
-        dsc3k (bool, optional): If True, use DSC3k as the internal block. If False, use DSBottleneck. Defaults to False.
-        e (float, optional): Expansion ratio for the C2f module's hidden channels. Defaults to 0.5.
-        g (int, optional): Number of groups for grouped convolution (passed to parent C2f). Defaults to 1.
-        shortcut (bool, optional): Whether to use shortcut connections in the internal blocks. Defaults to True.
-        k1 (int, optional): Kernel size for the first DSConv in internal blocks. Defaults to 3.
-        k2 (int, optional): Kernel size for the second DSConv in internal blocks. Defaults to 7.
-        d2 (int, optional): Dilation for the second DSConv in internal blocks. Defaults to 1.
-    Methods:
-        forward: Performs a forward pass through the DSC3k2 module (inherited from C2f).
-    Examples:
-        >>> import torch
-        >>> # Using DSBottleneck as internal block
-        >>> model1 = DSC3k2(c1=64, c2=64, n=2, dsc3k=False)
-        >>> x = torch.randn(2, 64, 128, 128)
-        >>> output1 = model1(x)
-        >>> print(f"With DSBottleneck: {output1.shape}")
-        With DSBottleneck: torch.Size([2, 64, 128, 128])
-        >>> # Using DSC3k as internal block
-        >>> model2 = DSC3k2(c1=64, c2=64, n=1, dsc3k=True)
-        >>> output2 = model2(x)
-        >>> print(f"With DSC3k: {output2.shape}")
-        With DSC3k: torch.Size([2, 64, 128, 128])
-    """
+if __name__ == "__main__":
+    # Generating Sample image
+    image_size = (1, 64, 224, 224)
+    image = torch.rand(*image_size)
 
-    def __init__(self, c1, c2, n=1, dsc3k=False, e=0.5, g=1, shortcut=True, k1=3, k2=7, d2=1):
-        super().__init__(c1, c2, n, shortcut, g, e)
-        if dsc3k:
-            self.m = nn.ModuleList(
-                DSC3k_AKConv(self.c, self.c, n=2, shortcut=shortcut, g=g, e=1.0, k1=k1, k2=k2, d2=d2) for _ in range(n))
-        else:
-            self.m = nn.ModuleList(
-                DSBottleneck_AKConv(self.c, self.c, shortcut=shortcut, e=1.0, k1=k1, k2=k2, d2=d2) for _ in range(n))
+    # Model
+    model = C3k2_AKConv(64, 64)
+
+    out = model(image)
+    print(out.size())

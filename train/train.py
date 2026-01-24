@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
     epoch_count = 3
     close_mosaic_count = 1
-    model_name = "yolo11n_C3k2CirculantAttention.yaml"
+    model_name = "yolo11n_C3k2AKConv.yaml"
     datasets = '/NWPU_VHR.yaml'
     seed = 42
     optimizer = 'SGD'
@@ -44,9 +44,9 @@ if __name__ == '__main__':
 
     dataset_name = Path(datasets).stem
     if module_edition != "e0":
-        run_name = f"{dataset_name}/{version}/seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
+        run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
     else:
-        run_name = f"{dataset_name}/{version}/seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
+        run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
 
     run_dir = save_path / run_name
 
@@ -85,46 +85,40 @@ if __name__ == '__main__':
         )
     )[0]
 
-    try:
-        model_cfg = Path("..") / "models" / version / model_name
-        model = YOLO(str(model_cfg))
+    model_cfg = Path("..") / "models" / version / model_name
+    model = YOLO(str(model_cfg))
 
-        results = model.train(
-            data=datasets_path + datasets,
-            cache=cacheTF,
-            imgsz=640,
-            epochs=epoch_count,
-            single_cls=False,
-            batch=batch_size,
-            pretrained=pretrained,
-            close_mosaic=close_mosaic_count,
-            mosaic=1.0,
-            workers=workers,
-            device='0',
-            optimizer=optimizer,
-            resume=False,
-            amp=amp,
-            patience=patience,
-            project=str(save_path),
-            name=run_name,
-            seed=seed
-        )
-        save_dir = Path(getattr(results, "save_dir", run_dir))
+    results = model.train(
+        data=datasets_path + datasets,
+        cache=cacheTF,
+        imgsz=640,
+        epochs=epoch_count,
+        single_cls=False,
+        batch=batch_size,
+        pretrained=pretrained,
+        close_mosaic=close_mosaic_count,
+        mosaic=1.0,
+        workers=workers,
+        device='0',
+        optimizer=optimizer,
+        resume=False,
+        amp=amp,
+        patience=patience,
+        project=str(save_path),
+        name=run_name,
+        seed=seed
+    )
+    save_dir = Path(getattr(results, "save_dir", run_dir))
+    sys.stdout.write = _stdout_write_orig
+    sys.stderr.write = _stderr_write_orig
+    sys.stdout = _stdout_orig
+    sys.stderr = _stderr_orig
 
-    except Exception as e:
-        print(f"Error: {e}")
-        save_dir = run_dir
+    save_dir.mkdir(parents=True, exist_ok=True)
+    log_path = save_dir / "run.log"
 
-    finally:
-        sys.stdout.write = _stdout_write_orig
-        sys.stderr.write = _stderr_write_orig
-        sys.stdout = _stdout_orig
-        sys.stderr = _stderr_orig
+    with open(log_path, "w", encoding="utf-8", errors="ignore") as f:
+        f.writelines(_buf)
 
-        save_dir.mkdir(parents=True, exist_ok=True)
-        log_path = save_dir / "run.log"
+    print(f"[OK] run.log saved to: {log_path}")
 
-        with open(log_path, "w", encoding="utf-8", errors="ignore") as f:
-            f.writelines(_buf)
-
-        print(f"[OK] run.log saved to: {log_path}")
