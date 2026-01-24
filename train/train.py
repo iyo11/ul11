@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
     epoch_count = 3
     close_mosaic_count = 1
-    model_name = "yolo11n_C3k2AKConv.yaml"
+    model_name = "yolo11n_C3k2SFMB.yaml"
     datasets = '/NWPU_VHR.yaml'
     seed = 42
     optimizer = 'SGD'

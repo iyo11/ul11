@@ -21,8 +21,10 @@ from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.block.C3K2AK import C3k2_AKConv
 from ultralytics.nn.add.block.C3K2FCA import C3k2_FCA
+from ultralytics.nn.add.block.C3K2GatedAttnetion import C3k2_GatedAttention, GatedAttention
 from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv, WTConv2d
 from ultralytics.nn.add.block.C3k2CirculantAttention import C3k2_CirculantAttention
+from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
 from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
 from ultralytics.nn.add.moe.esmoe import ESMoE
@@ -1629,7 +1631,10 @@ def parse_model(d, ch, verbose=True):
             CirculantAttention,
             C3k2_CirculantAttention,
             AKDConv,
-            C3k2_AKConv
+            C3k2_AKConv,
+            C3k2_SFMB,
+            C3k2_GatedAttention,
+            GatedAttention,
         }
     )
     repeat_modules = frozenset(
@@ -1655,7 +1660,9 @@ def parse_model(d, ch, verbose=True):
             WTConv2d,
             C3k2_WTConv,
             C3k2_CirculantAttention,
-            C3k2_AKConv
+            C3k2_AKConv,
+            C3k2_SFMB,
+            C3k2_GatedAttention
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -1675,7 +1682,7 @@ def parse_model(d, ch, verbose=True):
         if m in { LUMA }:
             c2 = ch[f]
             args = [c2, c2, *args]  # 自动将输入、输出通道设为一致s
-        elif m in { CARAFE, Converse2D, CEM, ECA, CBAM, CA, GAM, CirculantAttention }:
+        elif m in { CARAFE, Converse2D, CEM, ECA, CBAM, CA, GAM, CirculantAttention, GatedAttention }:
             c2 = ch[f]
             args = [c2, *args]
         elif m in { WFU }:
