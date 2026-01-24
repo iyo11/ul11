@@ -30,6 +30,7 @@ from ultralytics.nn.add.downSample.PWDConv import PWD2d
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.GatedSDPA import GatedSDPA
+from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
 from ultralytics.nn.improve.upsample.LUMA import LUMA
 
 from ultralytics.nn.add.downSample.ContextGuidedConv import ContextGuidedConv
@@ -1636,7 +1637,8 @@ def parse_model(d, ch, verbose=True):
             C3k2_SFMB,
             C3k2_GatedAttention,
             GatedAttention,
-            GatedSDPA
+            GatedSDPA,
+            OmniGatedSDPA,
         }
     )
     repeat_modules = frozenset(
@@ -1684,7 +1686,7 @@ def parse_model(d, ch, verbose=True):
         if m in { LUMA }:
             c2 = ch[f]
             args = [c2, c2, *args]  # 自动将输入、输出通道设为一致s
-        elif m in { CARAFE, Converse2D, CEM, ECA, CBAM, CA, GAM, CirculantAttention, GatedAttention, GatedSDPA }:
+        elif m in { CARAFE, Converse2D, CEM, ECA, CBAM, CA, GAM, CirculantAttention, GatedAttention, GatedSDPA, OmniGatedSDPA }:
             c2 = ch[f]
             args = [c2, *args]
         elif m in { WFU }:
