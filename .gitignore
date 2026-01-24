@@ -5,3 +5,7 @@
 /ultralytics.egg-info/
 /.ssh/
 .ssh/
+/datas/
+.ipynb_checkpoints
+__pycache__
+
