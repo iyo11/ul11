@@ -1,88 +1,96 @@
 import re
 import sys
 import warnings
-import platform
 from pathlib import Path
-from ultralytics import YOLO
+import platform
 
 warnings.simplefilter("ignore")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-base_path = Path(__file__).resolve().parent.parent
-save_path = base_path / "runs"
-
-if platform.system() == 'Windows':
-    datasets_root = Path('../datasets_local')
-    batch_size = 8
-    workers = 4
-    cacheTF = False
-else:
-    datasets_root = Path('../datasets')
-    batch_size = 24
-    workers = 10
-    cacheTF = True
-
-epoch_count = 300
-close_mosaic_count = 45
-model_name = "yolo11n_WTDConv.yaml"
-dataset_yaml = '/NWPU_VHR.yaml'
-seed = 42
-optimizer = 'SGD'
-amp = False
-patience = 0
-pretrained = True
-module_edition = "e0"
-
-m = re.search(r"^yolo(\d+)([A-Za-z0-9]+)(?:_(.+))?\.yaml$", model_name)
-if not m:
-    raise ValueError(f"model_name 格式不支持: {model_name}. 例: yolo11n.yaml 或 yolo11n_xxx.yaml")
-version = m.group(1)
-variant = m.group(2)
-module = m.group(3) or "base"
-dataset_name = Path(dataset_yaml).stem
-if module_edition != "e0":
-    run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
-else:
-    run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
-
-run_dir = save_path / run_name
-
-class DualLogger:
-    def __init__(self, filename, stream):
-        self.terminal = stream
-        self.log = open(filename, 'a', encoding='utf-8')
-        self.ansi_re = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")  # 用于去除控制台颜色代码
-    def write(self, message):
-        # 1. 打印到屏幕
-        self.terminal.write(message)
-        self.terminal.flush()
-        # 2. 写入到文件 (去除颜色代码)
-        clean_msg = self.ansi_re.sub("", message)
-        # 过滤逻辑：忽略刷屏的进度条（带 \r），只记录最终完成的（带 100%）
-        if "\r" not in clean_msg or "100%" in clean_msg:
-            self.log.write(clean_msg.replace("\r", ""))
-            self.log.flush()  # 【关键】强制写入硬盘
-
-    def flush(self):
-        self.terminal.flush()
-        self.log.flush()
-
-    def close(self):
-        self.log.close()
+from ultralytics import YOLO
 
 if __name__ == '__main__':
-    run_dir.mkdir(parents=True, exist_ok=True)
-    log_path = run_dir / "run.log"
-    print(f"LOG SAVE PATH: {log_path}")
-    sys.stdout = DualLogger(log_path, sys.stdout)
-    sys.stderr = DualLogger(log_path, sys.stderr)
+    base_path = Path(__file__).resolve().parent.parent
+    save_path = base_path / "runs"
+
+    if platform.system() == 'Windows':
+        datasets_path = '../datasets_local'
+        batch_size = 8
+        workers = 4
+        cacheTF = False
+    else:
+        datasets_path = '../datasets'
+        batch_size = 24
+        workers = 10
+        cacheTF = True
+
+    epoch_count = 3
+    close_mosaic_count = 1
+    model_name = "yolo11n_C3k2CirculantAttention.yaml"
+    datasets = '/NWPU_VHR.yaml'
+    seed = 42
+    optimizer = 'SGD'
+    amp = False
+    patience = 0
+    pretrained = True
+    module_edition = "e2"
+
+    m = re.search(r"^yolo(\d+)([A-Za-z0-9]+)(?:_(.+))?\.yaml$", model_name)
+    if not m:
+        raise ValueError(f"model_name 格式不支持: {model_name}. 例: yolo11n.yaml 或 yolo11n_xxx.yaml")
+    version = m.group(1)
+    variant = m.group(2)
+    module = m.group(3) or "base"
+
+    dataset_name = Path(datasets).stem
+    if module_edition != "e0":
+        run_name = f"{dataset_name}/{version}/seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
+    else:
+        run_name = f"{dataset_name}/{version}/seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
+
+    run_dir = save_path / run_name
+
+    # --- 关键修改区 ---
+    ansi_re = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+    _stdout_orig = sys.stdout
+    _stderr_orig = sys.stderr
+    _stdout_write_orig = sys.stdout.write
+    _stderr_write_orig = sys.stderr.write
+
+    _buf = []
+
+    # 【终极修正逻辑】：
+    # 1. 只要包含 "100%" -> 保留（这是跑完的最终状态）。
+    # 2. 否则，如果包含 "\r"（回车符），并且包含 "it/s"(速度) 或者 "%"(百分比) -> 丢弃（这是过程中的进度条）。
+    # 3. 其他 -> 保留。
+
+    sys.stdout.write = lambda s, _ow=_stdout_write_orig, _b=_buf, _ar=ansi_re: (
+        _ow(s),
+        (
+            (lambda t:
+             _b.append(t.replace("\r", "")) if ("100%" in t)
+             else (None if ("\r" in t and ("it/s" in t or "%" in t)) else _b.append(t))
+             )(_ar.sub("", s))
+        )
+    )[0]
+
+    sys.stderr.write = lambda s, _ow=_stderr_write_orig, _b=_buf, _ar=ansi_re: (
+        _ow(s),
+        (
+            (lambda t:
+             _b.append(t.replace("\r", "")) if ("100%" in t)
+             else (None if ("\r" in t and ("it/s" in t or "%" in t)) else _b.append(t))
+             )(_ar.sub("", s))
+        )
+    )[0]
 
     try:
         model_cfg = Path("..") / "models" / version / model_name
-        data_path = str(datasets_root) + dataset_yaml
         model = YOLO(str(model_cfg))
+
         results = model.train(
-            data=data_path,
+            data=datasets_path + datasets,
             cache=cacheTF,
             imgsz=640,
             epochs=epoch_count,
@@ -99,17 +107,24 @@ if __name__ == '__main__':
             patience=patience,
             project=str(save_path),
             name=run_name,
-            seed=seed,
-            exist_ok=True
+            seed=seed
         )
-        print(f"LOG SAVE PATH: {log_path}")
+        save_dir = Path(getattr(results, "save_dir", run_dir))
+
     except Exception as e:
-        print(f"ERROR: {e}")
-        raise e
+        print(f"Error: {e}")
+        save_dir = run_dir
 
     finally:
-        # 恢复标准输出流
-        sys.stdout.close()
-        sys.stderr.close()
-        sys.stdout = sys.stdout.terminal
-        sys.stderr = sys.stderr.terminal
+        sys.stdout.write = _stdout_write_orig
+        sys.stderr.write = _stderr_write_orig
+        sys.stdout = _stdout_orig
+        sys.stderr = _stderr_orig
+
+        save_dir.mkdir(parents=True, exist_ok=True)
+        log_path = save_dir / "run.log"
+
+        with open(log_path, "w", encoding="utf-8", errors="ignore") as f:
+            f.writelines(_buf)
+
+        print(f"[OK] run.log saved to: {log_path}")
