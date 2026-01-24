@@ -24,16 +24,16 @@ if __name__ == '__main__':
         workers = 10
         cacheTF = True
 
-    epoch_count = 3
-    close_mosaic_count = 1
-    model_name = "yolo11n_C3k2SFMB.yaml"
+    epoch_count = 300
+    close_mosaic_count = 45
+    model_name = "yolo11n_GatedSDPA.yaml"
     datasets = '/NWPU_VHR.yaml'
     seed = 42
     optimizer = 'SGD'
     amp = False
     patience = 0
     pretrained = True
-    module_edition = "e2"
+    module_edition = "e0"
 
     m = re.search(r"^yolo(\d+)([A-Za-z0-9]+)(?:_(.+))?\.yaml$", model_name)
     if not m:
