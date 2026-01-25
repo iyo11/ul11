@@ -29,6 +29,7 @@ from ultralytics.nn.add.block.C3k2CirculantAttention import C3k2_CirculantAttent
 from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
 from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
+from ultralytics.nn.add.guide.SFEContextGuide import SFEContextGuide
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
@@ -1640,7 +1641,8 @@ def parse_model(d, ch, verbose=True):
             GatedAttention,
             OmniGatedSDPA,
             C2PSA_DHOGSA,
-            C2PSASoftDHOGSA
+            C2PSASoftDHOGSA,
+            SFEContextGuide
         }
     )
     repeat_modules = frozenset(
