@@ -19,6 +19,7 @@ from ultralytics.nn.add.attention.GAM import GAM
 from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
+from ultralytics.nn.add.concat.BiFPN import BiConcat
 from ultralytics.nn.add.block.C2PSA_DHOGSA import C2PSA_DHOGSA
 from ultralytics.nn.add.block.C3K2AK import C3k2_AKConv
 from ultralytics.nn.add.block.C3K2FCA import C3k2_FCA
@@ -28,7 +29,6 @@ from ultralytics.nn.add.block.C3k2CirculantAttention import C3k2_CirculantAttent
 from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
 from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
-from ultralytics.nn.add.guide.SFEContextGuide import SFEContextGuide
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
@@ -39,7 +39,6 @@ from ultralytics.nn.add.downSample.SPDConv import SPDConv
 
 from ultralytics.nn.add.upsample.CARAFE import CARAFE
 from ultralytics.nn.add.upsample.Converse2D import Converse2D
-from ultralytics.nn.add.upsample.DySample import DySample
 from ultralytics.nn.add.upsample.SCEU import SCEU
 
 from ultralytics.nn.autobackend import check_class_names
@@ -1640,7 +1639,6 @@ def parse_model(d, ch, verbose=True):
             GatedAttention,
             OmniGatedSDPA,
             C2PSA_DHOGSA,
-            SFEContextGuide
         }
     )
     repeat_modules = frozenset(
@@ -1733,6 +1731,9 @@ def parse_model(d, ch, verbose=True):
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
+        elif m is BiConcat:
+            length = len([ch[x] for x in f])
+            args = [length]
         elif m in frozenset(
             {
                 Detect,

@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
     epoch_count = 300
     close_mosaic_count = 45
-    model_name = "yolo11n_SFEContextGuide.yaml"
+    model_name = "yolo11n_BiFPN.yaml"
     datasets = '/NWPU_VHR.yaml'
     seed = 42
     optimizer = 'SGD'
