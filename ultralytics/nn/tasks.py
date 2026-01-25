@@ -1639,6 +1639,7 @@ def parse_model(d, ch, verbose=True):
             GatedAttention,
             OmniGatedSDPA,
             C2PSA_DHOGSA,
+            CARAFE
         }
     )
     repeat_modules = frozenset(
