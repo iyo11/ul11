@@ -20,24 +20,22 @@ backbone:
   - [-1, 2, C2PSA, [1024]]              # 10
 
 head:
-  - [10, 1, SFEContextGuide, [1024]]        # 11 (P5_SFE)
-  - [6, 1, SFEContextGuide, [512]]         # 12 (P4_SFE)
-  - [4, 1, SFEContextGuide, [512]]         # 13 (P3_SFE)
+  - [10, 1, nn.Upsample, [None, 2, "nearest"]]   # 11  P5 -> up to P4
+  - [[-1, 6], 1, Concat, [1]]                    # 12  concat(P5_up, P4_backbone)
+  - [-1, 1, SFEContextGuide, [512]]              # 13
+  - [-1, 2, C3k2, [512, False]]                  # 14  P4 feature
 
-  - [11, 1, nn.Upsample, [None, 2, "nearest"]] # 14
-  - [[-1, 12], 1, Concat, [1]]          # 15
-  - [-1, 2, C3k2, [512, False]]         # 16 (P4 feature)
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 15  P4 -> up to P3
+  - [[-1, 4], 1, Concat, [1]]                    # 16  concat(P4_up, P3_backbone)
+  - [-1, 1, SFEContextGuide, [256]]              # 17
+  - [-1, 2, C3k2, [256, False]]                  # 18  P3 feature / Out small
 
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 17
-  - [[-1, 13], 1, Concat, [1]]          # 18
-  - [-1, 2, C3k2, [256, False]]         # 19 (P3 feature / Out small)
+  - [-1, 1, Conv, [256, 3, 2]]                   # 19  down P3 -> P4
+  - [[-1, 14], 1, Concat, [1]]                   # 20
+  - [-1, 2, C3k2, [512, False]]                  # 21  P4 feature / Out medium
 
-  - [-1, 1, Conv, [256, 3, 2]]          # 20
-  - [[-1, 16], 1, Concat, [1]]          # 21
-  - [-1, 2, C3k2, [512, False]]         # 22 (P4 feature / Out medium)
+  - [-1, 1, Conv, [512, 3, 2]]                   # 22  down P4 -> P5
+  - [[-1, 10], 1, Concat, [1]]                   # 23
+  - [-1, 2, C3k2, [1024, True]]                  # 24  P5 feature / Out large
 
-  - [-1, 1, Conv, [512, 3, 2]]          # 23
-  - [[-1, 11], 1, Concat, [1]]          # 24
-  - [-1, 2, C3k2, [1024, True]]         # 25 (P5 feature / Out large)
-
-  - [[19, 22, 25], 1, Detect, [nc]]     # 26
+  - [[18, 21, 24], 1, Detect, [nc]]              # 25
