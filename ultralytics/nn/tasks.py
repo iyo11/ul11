@@ -29,7 +29,6 @@ from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
 from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
 from ultralytics.nn.add.guide.SFEContextGuide import SFEContextGuide
-from ultralytics.nn.add.guide.StepwiseContextGuide import StepwiseContextGuide
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
@@ -1696,18 +1695,7 @@ def parse_model(d, ch, verbose=True):
             c1 = [ch[x] for x in f]
             c2 = c1[0]
             args = [c1]
-        elif m is StepwiseContextGuide:
-            assert isinstance(f, (list, tuple)) and len(f) == 2, "StepwiseContextGuide expects 2 inputs"
-            c_local = ch[f[0]]
-            c_guide = ch[f[1]]
-            if len(args) == 1:
-                r = args[0]
-                c_out = c_local
-            else:
-                c_out, r = args[0], args[1]
-                c_out = make_divisible(min(c_out, max_channels) * width, 8)
-            args = [[c_local, c_guide], c_out, r]
-            c2 = c_out
+
 
         elif m in base_modules:
             c1, c2 = ch[f], args[0]
@@ -1745,10 +1733,6 @@ def parse_model(d, ch, verbose=True):
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
-        elif m in {StepwiseContextGuide}:
-                c1 = [ch[x] for x in f]
-                c2 = args[0]
-                args = [c1, c2, *args[1:]]
         elif m in frozenset(
             {
                 Detect,
