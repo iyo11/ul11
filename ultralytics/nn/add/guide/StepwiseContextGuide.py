@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+_all__ = ['StepwiseContextGuide']
+
 def _make_norm(c: int, use_gn: bool = True, gn_groups: int = 16):
     if not use_gn:
         return nn.BatchNorm2d(c)
@@ -10,7 +12,7 @@ def _make_norm(c: int, use_gn: bool = True, gn_groups: int = 16):
         g -= 1
     return nn.GroupNorm(g, c)
 
-class SCG(nn.Module):
+class StepwiseContextGuide(nn.Module):
     def __init__(self, c_local: int, c_guide: int, r: int = 4,
                  use_gn: bool = True, gn_groups: int = 16):
         super().__init__()

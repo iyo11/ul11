@@ -29,6 +29,7 @@ from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
 from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
 from ultralytics.nn.add.guide.SFEContextGuide import SFEContextGuide
+from ultralytics.nn.add.guide.StepwiseContextGuide import StepwiseContextGuide
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
@@ -1695,6 +1696,11 @@ def parse_model(d, ch, verbose=True):
             c1 = [ch[x] for x in f]
             c2 = c1[0]
             args = [c1]
+        elif m is { StepwiseContextGuide }:
+            c1 = ch[f[0]]
+            c2 = ch[f[1]]
+            args = [c1, c2, *args]
+            c2 = c1
 
         elif m in base_modules:
             c1, c2 = ch[f], args[0]
@@ -1732,6 +1738,9 @@ def parse_model(d, ch, verbose=True):
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
+        elif m is StepwiseContextGuide:
+            c2 = ch[f[0]]
+            args = [ch[f[0]], ch[f[1]], *args]
         elif m in frozenset(
             {
                 Detect,
