@@ -320,7 +320,7 @@ class BaseModel(torch.nn.Module):
         self = super()._apply(fn)
         m = self.model[-1]  # Detect()
         if isinstance(
-            m, Detect
+            m, (Detect)
         ):  # includes all Detect subclasses like Segment, Pose, OBB, WorldDetect, YOLOEDetect, YOLOESegment
             m.stride = fn(m.stride)
             m.anchors = fn(m.anchors)
@@ -428,7 +428,7 @@ class DetectionModel(BaseModel):
 
         # Build strides
         m = self.model[-1]  # Detect()
-        if isinstance(m, Detect):  # includes all Detect subclasses like Segment, Pose, OBB, YOLOEDetect, YOLOESegment
+        if isinstance(m, (Detect)):  # includes all Detect subclasses like Segment, Pose, OBB, YOLOEDetect, YOLOESegment
             s = 256  # 2x min stride
             m.inplace = self.inplace
 
@@ -1696,11 +1696,18 @@ def parse_model(d, ch, verbose=True):
             c1 = [ch[x] for x in f]
             c2 = c1[0]
             args = [c1]
-        elif m is { StepwiseContextGuide }:
-            c1 = ch[f[0]]
-            c2 = ch[f[1]]
-            args = [c1, c2, *args]
-            c2 = c1
+        elif m is StepwiseContextGuide:
+            assert isinstance(f, (list, tuple)) and len(f) == 2, "StepwiseContextGuide expects 2 inputs"
+            c_local = ch[f[0]]
+            c_guide = ch[f[1]]
+            if len(args) == 1:
+                r = args[0]
+                c_out = c_local
+            else:
+                c_out, r = args[0], args[1]
+                c_out = make_divisible(min(c_out, max_channels) * width, 8)
+            args = [[c_local, c_guide], c_out, r]
+            c2 = c_out
 
         elif m in base_modules:
             c1, c2 = ch[f], args[0]
@@ -1738,9 +1745,10 @@ def parse_model(d, ch, verbose=True):
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
-        elif m is StepwiseContextGuide:
-            c2 = ch[f[0]]
-            args = [ch[f[0]], ch[f[1]], *args]
+        elif m in {StepwiseContextGuide}:
+                c1 = [ch[x] for x in f]
+                c2 = args[0]
+                args = [c1, c2, *args[1:]]
         elif m in frozenset(
             {
                 Detect,
@@ -1753,7 +1761,7 @@ def parse_model(d, ch, verbose=True):
                 Pose,
                 Pose26,
                 OBB,
-                OBB26,
+                OBB26
             }
         ):
             args.extend([reg_max, end2end, [ch[x] for x in f]])
@@ -1855,6 +1863,8 @@ def guess_model_task(model):
             return "pose"
         if "obb" in m:
             return "obb"
+        else:
+            return "detect"
 
     # Guess from model cfg
     if isinstance(model, dict):

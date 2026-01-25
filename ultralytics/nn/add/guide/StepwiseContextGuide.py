@@ -2,57 +2,80 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-_all__ = ['StepwiseContextGuide']
-
-def _make_norm(c: int, use_gn: bool = True, gn_groups: int = 16):
-    if not use_gn:
-        return nn.BatchNorm2d(c)
-    g = min(gn_groups, c)
-    while g > 1 and (c % g != 0):
-        g -= 1
-    return nn.GroupNorm(g, c)
+__all__ = ['StepwiseContextGuide']
 
 class StepwiseContextGuide(nn.Module):
-    def __init__(self, c_local: int, c_guide: int, r: int = 4,
-                 use_gn: bool = True, gn_groups: int = 16):
+    def __init__(self, c1, c2, r=4):
         super().__init__()
+        # 解析输入 c1: [c_local, c_guide]
+        if isinstance(c1, (list, tuple)):
+            c_local, c_guide = c1
+        else:
+            c_local, c_guide = c1, c1
 
-        # 1) align guide -> local channels
-        self.align = nn.Conv2d(c_guide, c_local, 1, 1, 0, bias=False)
-        self.norm_align = _make_norm(c_local, use_gn, gn_groups)
-
-        # 2) channel gate (SE-like)
-        hidden = max(1, c_local // r)
-        self.gate_c = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(c_local, hidden, 1, bias=True),
-            nn.SiLU(inplace=True),
-            nn.Conv2d(hidden, c_local, 1, bias=True),
+        # 1. 对齐通道 (Align) - 轻量化
+        # 如果 guide 通道很大，先用 1x1 降维，不仅能对齐，还能减少后续 grid_sample 的计算量
+        # 我们不再强制 align 输出等于 c_local，而是等于 c2 (目标输出)，这样能大幅省参数
+        self.align = nn.Sequential(
+            nn.Conv2d(c_guide, c2, 1, 1, 0, bias=False),
+            nn.BatchNorm2d(c2)
         )
 
-        # 3) spatial gate (lightweight)
-        self.gate_s = nn.Conv2d(c_local, c_local, 3, 1, 1, groups=c_local, bias=False)
+        # 2. 采样点生成器 - 保持不变 (本身很轻量)
+        self.offset_gen = nn.Sequential(
+            nn.Conv2d(c_local, c_local // 4, 3, 1, 1, groups=c_local // 4, bias=False),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(c_local // 4, 2, 1, 1, 0, bias=True)
+        )
 
-        # 4) learnable scales (init 0 => stable start)
-        self.alpha = nn.Parameter(torch.zeros(1, c_local, 1, 1))
-        self.beta  = nn.Parameter(torch.zeros(1, c_local, 1, 1))
+        # 3. MLP 分支 - 加入 Bottleneck (瓶颈结构)
+        # 原始代码是 c_local -> c_local -> c_local，这里改为 c_local -> c_mid -> c2
+        # 既融合了特征，又将维度统一到了输出维度 c2
+        mid_c = c2 // 2  # 设为输出的一半作为瓶颈
+        self.mlp = nn.Sequential(
+            nn.Conv2d(c_local, mid_c, 1, 1, 0, bias=False),
+            nn.BatchNorm2d(mid_c),
+            nn.GELU(),
+            nn.Conv2d(mid_c, c2, 1, 1, 0, bias=False) # 最终映射到 c2
+        )
+
+        # 4. 最终融合
+        # 此时 align 分支输出是 c2, mlp 分支输出也是 c2，直接相加即可，不需要额外的 Final Conv
+        # 这一步省掉了一个巨大的卷积层
+        self.fusion_act = nn.SiLU(inplace=True)
 
     def forward(self, x):
-        # Ultralytics YAML 传入 list 时，x 是 [x_local, x_guide]
         if isinstance(x, (list, tuple)):
             x_local, x_guide = x
         else:
-            raise TypeError("SCGMv2 expects [x_local, x_guide].")
+            x_local, x_guide = x, x
 
-        g = self.norm_align(self.align(x_guide))
-        g_up = F.interpolate(g, size=x_local.shape[2:], mode="bilinear", align_corners=False)
+        B, C, H, W = x_local.shape
 
-        gate_c = torch.sigmoid(self.gate_c(g_up))          # (B,C,1,1)
-        gate_s = torch.sigmoid(self.gate_s(g_up))          # (B,C,H,W)
+        # --- Upsample Branch (Aligned) ---
+        # 先对齐 guide 的通道到目标维度 c2
+        g = self.align(x_guide)
 
-        gate = 0.5 * (gate_s + gate_c)                     # (B,C,H,W)
-        gate = 1.0 + self.alpha * (gate - 0.5)             # residual gate
+        # 生成偏移量
+        offset = self.offset_gen(x_local)
+        grid = self._get_grid(B, H, W, x_local.device)
+        v_grid = grid + offset.permute(0, 2, 3, 1) * (2.0 / max(H, W))
 
-        x_gated = x_local * gate
-        out = x_gated + self.beta * g_up                   # controllable injection
+        # Grid Sample (隐式上采样)
+        # g 的尺寸小，v_grid 尺寸大，grid_sample 会自动插值
+        g_aligned = F.grid_sample(g, v_grid, mode='bilinear', padding_mode='zeros', align_corners=False)
+
+        # --- MLP Branch ---
+        l_feat = self.mlp(x_local)
+
+        # --- Fusion ---
+        # 直接相加 (Element-wise Add)
+        out = self.fusion_act(g_aligned + l_feat)
+
         return out
+
+    def _get_grid(self, B, H, W, device):
+        y, x = torch.meshgrid(torch.linspace(-1, 1, H, device=device),
+                              torch.linspace(-1, 1, W, device=device), indexing='ij')
+        grid = torch.stack((x, y), dim=-1).unsqueeze(0).repeat(B, 1, 1, 1)
+        return grid
