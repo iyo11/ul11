@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ultralytics.nn.modules import Conv, PSABlock
+from ultralytics.nn.modules import Conv
 
-__all__ = ['C2PSA_DHOGSA_Soft']
+__all__ = ['C2PSASoftDHOGSA']
 
 
 class SoftDHOG(nn.Module):
