@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['ContextGuidedConv']
+__all__ = ['ContextGuidedDConv']
 
 
 class FGlo(nn.Module):
@@ -26,7 +26,7 @@ class FGlo(nn.Module):
         return x * self.fc(self.avg_pool(x))
 
 
-class ContextGuidedConv(nn.Module):
+class ContextGuidedDConv(nn.Module):
     """
     下采样模块: (H,W,C) -> (H/2, W/2, 2C)
     """

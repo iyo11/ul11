@@ -32,7 +32,7 @@ from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
 from ultralytics.nn.improve.upsample.LUMA import LUMA
 
-from ultralytics.nn.add.downSample.ContextGuidedConv import ContextGuidedConv
+from ultralytics.nn.add.downSample.ContextGuidedDConv import ContextGuidedDConv
 from ultralytics.nn.add.downSample.SPDConv import SPDConv
 
 from ultralytics.nn.add.upsample.CARAFE import CARAFE
@@ -1613,7 +1613,7 @@ def parse_model(d, ch, verbose=True):
             SCDown,
             C2fCIB,
             A2C2f,
-            ContextGuidedConv,
+            ContextGuidedDConv,
             CrossAxisAttention,
             FCAttention,
             C3k2_FCA,
@@ -1656,7 +1656,7 @@ def parse_model(d, ch, verbose=True):
             C2fCIB,
             C2PSA,
             A2C2f,
-            ContextGuidedConv,
+            ContextGuidedDConv,
             C3k2_FCA,
             SPDConv,
             WTConv2d,
