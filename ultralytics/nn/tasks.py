@@ -20,6 +20,7 @@ from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.block.C2PSA_DHOGSA import C2PSA_DHOGSA
+from ultralytics.nn.add.block.C2PSA_SoftDHOGSA import C2PSASoftDHOGSA
 from ultralytics.nn.add.block.C3K2AK import C3k2_AKConv
 from ultralytics.nn.add.block.C3K2FCA import C3k2_FCA
 from ultralytics.nn.add.block.C3K2GatedAttnetion import C3k2_GatedAttention, GatedAttention
@@ -1638,7 +1639,8 @@ def parse_model(d, ch, verbose=True):
             C3k2_GatedAttention,
             GatedAttention,
             OmniGatedSDPA,
-            C2PSA_DHOGSA
+            C2PSA_DHOGSA,
+            C2PSASoftDHOGSA
         }
     )
     repeat_modules = frozenset(
