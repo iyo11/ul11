@@ -1,13 +1,20 @@
 import re
 import sys
 import warnings
-from pathlib import Path
 import platform
 import traceback
+from pathlib import Path
+
 from datetime import datetime
 
-import yaml
+# --- 核心修复：解决 Linux 下找不到 utils 模块的问题 ---
+# 获取当前脚本所在目录的父目录（即项目根目录 ul11）
+base_path = Path(__file__).resolve().parent.parent
+if str(base_path) not in sys.path:
+    sys.path.insert(0, str(base_path))
+# ---------------------------------------------------
 
+import yaml
 from utils.mail.email_sender import send_text_email, load_config as load_email_config
 
 warnings.simplefilter("ignore")
@@ -35,9 +42,10 @@ def _send_email_safe(receiver: str, subject: str, content: str) -> None:
     except Exception as e:
         print(f"Email notification failed: {e}")
 
+
 def load_train_config():
-    current_dir = Path(__file__).resolve().parent
-    config_path = current_dir.parent / "config/train.yaml"
+    # 使用 base_path 绝对路径定位配置文件
+    config_path = base_path / "config/train.yaml"
 
     if not config_path.exists():
         raise FileNotFoundError(f"Train config not found: {config_path}")
@@ -45,10 +53,11 @@ def load_train_config():
     with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+
 if __name__ == "__main__":
-    base_path = Path(__file__).resolve().parent.parent
     save_path = base_path / "runs"
     train_cfg = load_train_config()["train"]
+
     # Platform-specific config
     if platform.system() == "Windows":
         os_cfg = train_cfg["windows"]
@@ -59,6 +68,7 @@ if __name__ == "__main__":
     batch_size = os_cfg["batch_size"]
     workers = os_cfg["workers"]
     cacheTF = os_cfg["cache"]
+
     # Common training config
     epoch_count = train_cfg["epochs"]
     close_mosaic_count = train_cfg["close_mosaic"]
@@ -70,6 +80,7 @@ if __name__ == "__main__":
     patience = train_cfg["patience"]
     pretrained = train_cfg["pretrained"]
     module_edition = train_cfg["module_edition"]
+
     # email receiver
     email_cfg = load_email_config()["email"]
     receiver = email_cfg["receiver"]
@@ -108,18 +119,20 @@ if __name__ == "__main__":
     _stderr_write_orig = sys.stderr.write
     _buf = []
 
+
     def _capture_write_factory(_orig_write):
         def _w(s):
             _orig_write(s)
             t = ansi_re.sub("", s)
-            # progress bars contain \r updates; skip noisy interim lines
             if "100%" in t:
                 _buf.append(t.replace("\r", ""))
             else:
                 if ("\r" in t) and ("it/s" in t or "%" in t):
                     return
                 _buf.append(t.replace("\r", ""))
+
         return _w
+
 
     sys.stdout.write = _capture_write_factory(_stdout_write_orig)
     sys.stderr.write = _capture_write_factory(_stderr_write_orig)
@@ -132,7 +145,8 @@ if __name__ == "__main__":
     t0 = datetime.now()
 
     try:
-        model_cfg = Path("..") / "models" / version / model_name
+        # 修改点：确保模型配置文件路径在 Linux 下也能准确找到
+        model_cfg = base_path / "models" / version / model_name
         model = YOLO(str(model_cfg))
 
         results = model.train(
@@ -156,7 +170,6 @@ if __name__ == "__main__":
             seed=seed,
         )
 
-        # Ultralytics usually sets results.save_dir
         save_dir = Path(getattr(results, "save_dir", run_dir))
         save_dir.mkdir(parents=True, exist_ok=True)
         log_path = save_dir / "run.log"
@@ -165,20 +178,16 @@ if __name__ == "__main__":
     except Exception:
         status = "FAILED"
         err_text = traceback.format_exc()
-
-        # If save_dir isn't available, still keep log under run_dir
         save_dir = run_dir
         save_dir.mkdir(parents=True, exist_ok=True)
         log_path = save_dir / "run.log"
 
     finally:
-        # Restore stdout/stderr no matter what
         sys.stdout.write = _stdout_write_orig
         sys.stderr.write = _stderr_write_orig
         sys.stdout = _stdout_orig
         sys.stderr = _stderr_orig
 
-        # Write run.log
         try:
             save_dir.mkdir(parents=True, exist_ok=True)
             with open(log_path, "w", encoding="utf-8", errors="ignore") as f:
@@ -187,7 +196,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Failed to write run.log: {e}")
 
-        # Email notification (never raise)
         try:
             elapsed = datetime.now() - t0
             log_text = _read_text_safe(log_path, limit=150_000)
@@ -210,18 +218,18 @@ if __name__ == "__main__":
 
             if status == "FAILED":
                 content = (
-                    header
-                    + "---- Exception Traceback ----\n"
-                    + (err_text or "No traceback captured.\n")
-                    + "\n---- Captured Log (run.log) ----\n"
-                    + (log_text or "(empty)\n")
+                        header
+                        + "---- Exception Traceback ----\n"
+                        + (err_text or "No traceback captured.\n")
+                        + "\n---- Captured Log (run.log) ----\n"
+                        + (log_text or "(empty)\n")
                 )
             else:
                 content = (
-                    header
-                    + "Training finished successfully.\n\n"
-                    + "---- Captured Log (run.log) ----\n"
-                    + (log_text or "(empty)\n")
+                        header
+                        + "Training finished successfully.\n\n"
+                        + "---- Captured Log (run.log) ----\n"
+                        + (log_text or "(empty)\n")
                 )
 
             _send_email_safe(receiver, subject, content)
@@ -229,6 +237,5 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Email notification build/send failed: {e}")
 
-    # If failed, keep non-zero exit code (optional but useful for scripts)
     if status == "FAILED":
         sys.exit(1)
