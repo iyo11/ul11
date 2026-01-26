@@ -1,0 +1,23 @@
+train:
+  windows:
+    datasets_path: "../datasets_local"
+    batch_size: 8
+    workers: 4
+    cache: false
+
+  linux:
+    datasets_path: "../datasets"
+    batch_size: 24
+    workers: 10
+    cache: true
+
+  epochs: 300
+  close_mosaic: 45
+  model_name: "yolo11n_HCMFA1.yaml"
+  dataset_yaml: "/NWPU_VHR.yaml"
+  seed: 42
+  optimizer: "SGD"
+  amp: false
+  patience: 0
+  pretrained: true
+  module_edition: "e0"
