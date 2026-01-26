@@ -345,9 +345,9 @@ class v8DetectionLoss:
         m = model.model[-1]  # Detect() module
 
 
-        self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        #修改LOSS
-        #self.bce = AdaFocalLoss(nn.BCEWithLogitsLoss(reduction="none"))
+        #self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        #修改LOSS AdaFocalLoss
+        self.bce = AdaFocalLoss(nn.BCEWithLogitsLoss(reduction="none"))
 
         self.hyp = h
         self.stride = m.stride  # model strides
