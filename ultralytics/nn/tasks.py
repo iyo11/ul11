@@ -19,6 +19,7 @@ from ultralytics.nn.add.attention.GAM import GAM
 from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
+from ultralytics.nn.add.block.C3K2DIFF import C3k2_DIFF, C2PSA_DIFF
 from ultralytics.nn.add.concat.BiFPN import BiConcat
 from ultralytics.nn.add.block.C2PSA_DHOGSA import C2PSA_DHOGSA
 from ultralytics.nn.add.block.C3K2AK import C3k2_AKConv
@@ -1639,7 +1640,9 @@ def parse_model(d, ch, verbose=True):
             GatedAttention,
             OmniGatedSDPA,
             C2PSA_DHOGSA,
-            CARAFE
+            CARAFE,
+            C3k2_DIFF,
+            C2PSA_DIFF
         }
     )
     repeat_modules = frozenset(
@@ -1667,7 +1670,8 @@ def parse_model(d, ch, verbose=True):
             C3k2_CirculantAttention,
             C3k2_AKConv,
             C3k2_SFMB,
-            C3k2_GatedAttention
+            C3k2_GatedAttention,
+            C3k2_DIFF,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
