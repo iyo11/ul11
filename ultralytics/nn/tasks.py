@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
-
+from ultralytics.nn.add.attention.APCM import APCM
 from ultralytics.nn.add.attention.CA import CA
 from ultralytics.nn.add.attention.CBAM import CBAM
 from ultralytics.nn.add.attention.CirculantAttention import CirculantAttention
@@ -32,7 +32,7 @@ from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
-from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
+from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA, MetaOmniBlock, MetaOmniBlock_DIFF
 from ultralytics.nn.improve.upsample.LUMA import LUMA
 
 from ultralytics.nn.add.downSample.ContextGuidedDConv import ContextGuidedDConv
@@ -1642,7 +1642,10 @@ def parse_model(d, ch, verbose=True):
             C2PSA_DHOGSA,
             CARAFE,
             C3k2_DIFF,
-            C2PSA_DIFF
+            C2PSA_DIFF,
+            APCM,
+            MetaOmniBlock,
+            MetaOmniBlock_DIFF
         }
     )
     repeat_modules = frozenset(
@@ -1688,13 +1691,31 @@ def parse_model(d, ch, verbose=True):
                     args[j] = locals()[a] if a in locals() else ast.literal_eval(a)
         n = n_ = max(round(n * depth), 1) if n > 1 else n  # depth gain
 
-        if m in { LUMA }:
+        if m in {
+            LUMA
+        }:
             c2 = ch[f]
             args = [c2, c2, *args]  # 自动将输入、输出通道设为一致s
-        elif m in { CARAFE, Converse2D, CEM, ECA, CBAM, CA, GAM, CirculantAttention, GatedAttention, OmniGatedSDPA }:
+        elif m in {
+            CARAFE,
+            Converse2D,
+            CEM,
+            ECA,
+            CBAM,
+            CA,
+            GAM,
+            CirculantAttention,
+            GatedAttention,
+            OmniGatedSDPA,
+            APCM,
+            MetaOmniBlock,
+            MetaOmniBlock_DIFF
+        }:
             c2 = ch[f]
             args = [c2, *args]
-        elif m in { WFU }:
+        elif m in {
+            WFU
+        }:
             c1 = [ch[x] for x in f]
             c2 = c1[0]
             args = [c1]
