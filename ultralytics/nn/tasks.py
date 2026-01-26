@@ -22,9 +22,11 @@ from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.attention.HCMFA import HCMFA
 from ultralytics.nn.add.block.C3K2DIFF import C3k2_DIFF, C2PSA_DIFF
 from ultralytics.nn.add.block.C3K2DSConv import C3k2_DSConv
+from ultralytics.nn.add.block.C3K2DWRSeg import C3k2_DWRSeg
 from ultralytics.nn.add.block.C3K2FasterBlock import C3k2_FasterBlock
 from ultralytics.nn.add.block.C3K2MS import C3k2_MSBlcok
 from ultralytics.nn.add.block.C3K2SAConv import C3k2_SAConv
+from ultralytics.nn.add.block.C3K2_ScConv import C3k2_ScConv, ScConv
 from ultralytics.nn.add.concat.BiFPN import BiConcat
 from ultralytics.nn.add.block.C2PSA_DHOGSA import C2PSA_DHOGSA
 from ultralytics.nn.add.block.C3K2AK import C3k2_AKConv
@@ -36,6 +38,7 @@ from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
 from ultralytics.nn.add.downSample.SADConv import SADConv
 from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
+from ultralytics.nn.add.downSample.SCDConv import ScDConv
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
@@ -1655,7 +1658,11 @@ def parse_model(d, ch, verbose=True):
             C3k2_FasterBlock,
             C3k2_DSConv,
             C3k2_SAConv,
-            SADConv
+            SADConv,
+            C3k2_DWRSeg,
+            ScDConv,
+            C3k2_ScConv,
+            ScConv
         }
     )
     repeat_modules = frozenset(
@@ -1688,7 +1695,9 @@ def parse_model(d, ch, verbose=True):
             C3k2_MSBlcok,
             C3k2_FasterBlock,
             C3k2_DSConv,
-            C3k2_SAConv
+            C3k2_SAConv,
+            C3k2_DWRSeg,
+            C3k2_ScConv
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
