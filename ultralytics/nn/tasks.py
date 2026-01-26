@@ -19,7 +19,12 @@ from ultralytics.nn.add.attention.GAM import GAM
 from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
+from ultralytics.nn.add.attention.HCMFA import HCMFA
 from ultralytics.nn.add.block.C3K2DIFF import C3k2_DIFF, C2PSA_DIFF
+from ultralytics.nn.add.block.C3K2DSConv import C3k2_DSConv
+from ultralytics.nn.add.block.C3K2FasterBlock import C3k2_FasterBlock
+from ultralytics.nn.add.block.C3K2MS import C3k2_MSBlcok
+from ultralytics.nn.add.block.C3K2SAConv import C3k2_SAConv
 from ultralytics.nn.add.concat.BiFPN import BiConcat
 from ultralytics.nn.add.block.C2PSA_DHOGSA import C2PSA_DHOGSA
 from ultralytics.nn.add.block.C3K2AK import C3k2_AKConv
@@ -28,6 +33,7 @@ from ultralytics.nn.add.block.C3K2GatedAttnetion import C3k2_GatedAttention, Gat
 from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv, WTConv2d
 from ultralytics.nn.add.block.C3k2CirculantAttention import C3k2_CirculantAttention
 from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
+from ultralytics.nn.add.downSample.SADConv import SADConv
 from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
 from ultralytics.nn.add.moe.esmoe import ESMoE
@@ -1644,6 +1650,12 @@ def parse_model(d, ch, verbose=True):
             C3k2_DIFF,
             C2PSA_DIFF,
             APCM,
+            HCMFA,
+            C3k2_MSBlcok,
+            C3k2_FasterBlock,
+            C3k2_DSConv,
+            C3k2_SAConv,
+            SADConv
         }
     )
     repeat_modules = frozenset(
@@ -1673,6 +1685,10 @@ def parse_model(d, ch, verbose=True):
             C3k2_SFMB,
             C3k2_GatedAttention,
             C3k2_DIFF,
+            C3k2_MSBlcok,
+            C3k2_FasterBlock,
+            C3k2_DSConv,
+            C3k2_SAConv
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -1705,9 +1721,14 @@ def parse_model(d, ch, verbose=True):
             CirculantAttention,
             GatedAttention,
             OmniGatedSDPA,
-            APCM,
+            APCM
         }:
             c2 = ch[f]
+            args = [c2, *args]
+        elif m in {
+            HCMFA
+        }:
+            c2 = ch[f[1]]
             args = [c2, *args]
         elif m in {
             WFU

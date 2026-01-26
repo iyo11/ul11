@@ -12,7 +12,6 @@ from ultralytics import YOLO
 if __name__ == '__main__':
     base_path = Path(__file__).resolve().parent.parent
     save_path = base_path / "runs"
-
     if platform.system() == 'Windows':
         datasets_path = '../datasets_local'
         batch_size = 8
@@ -26,7 +25,7 @@ if __name__ == '__main__':
 
     epoch_count = 300
     close_mosaic_count = 45
-    model_name = "yolo11n_OmniGatedSDPA.yaml"
+    model_name = "yolo11n_SADConv.yaml"
     datasets = '/NWPU_VHR.yaml'
     seed = 42
     optimizer = 'SGD'
@@ -34,6 +33,7 @@ if __name__ == '__main__':
     patience = 0
     pretrained = True
     module_edition = "e0"
+
 
     m = re.search(r"^yolo(\d+)([A-Za-z0-9]+)(?:_(.+))?\.yaml$", model_name)
     if not m:
@@ -47,24 +47,13 @@ if __name__ == '__main__':
         run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{module_edition}_{dataset_name}_{epoch_count}_{seed}"
     else:
         run_name = f"{dataset_name}/v{version}_seed_{seed}/{version}{variant}_{module}_{dataset_name}_{epoch_count}_{seed}"
-
     run_dir = save_path / run_name
-
-    # --- 关键修改区 ---
     ansi_re = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-
     _stdout_orig = sys.stdout
     _stderr_orig = sys.stderr
     _stdout_write_orig = sys.stdout.write
     _stderr_write_orig = sys.stderr.write
-
     _buf = []
-
-    # 【终极修正逻辑】：
-    # 1. 只要包含 "100%" -> 保留（这是跑完的最终状态）。
-    # 2. 否则，如果包含 "\r"（回车符），并且包含 "it/s"(速度) 或者 "%"(百分比) -> 丢弃（这是过程中的进度条）。
-    # 3. 其他 -> 保留。
-
     sys.stdout.write = lambda s, _ow=_stdout_write_orig, _b=_buf, _ar=ansi_re: (
         _ow(s),
         (
@@ -74,7 +63,6 @@ if __name__ == '__main__':
              )(_ar.sub("", s))
         )
     )[0]
-
     sys.stderr.write = lambda s, _ow=_stderr_write_orig, _b=_buf, _ar=ansi_re: (
         _ow(s),
         (
@@ -84,10 +72,8 @@ if __name__ == '__main__':
              )(_ar.sub("", s))
         )
     )[0]
-
     model_cfg = Path("..") / "models" / version / model_name
     model = YOLO(str(model_cfg))
-
     results = model.train(
         data=datasets_path + datasets,
         cache=cacheTF,
@@ -113,12 +99,9 @@ if __name__ == '__main__':
     sys.stderr.write = _stderr_write_orig
     sys.stdout = _stdout_orig
     sys.stderr = _stderr_orig
-
     save_dir.mkdir(parents=True, exist_ok=True)
     log_path = save_dir / "run.log"
-
     with open(log_path, "w", encoding="utf-8", errors="ignore") as f:
         f.writelines(_buf)
-
     print(f"[OK] run.log saved to: {log_path}")
 
