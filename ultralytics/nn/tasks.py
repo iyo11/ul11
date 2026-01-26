@@ -32,7 +32,7 @@ from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
-from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA, MetaOmniBlock, MetaOmniBlock_DIFF
+from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
 from ultralytics.nn.improve.upsample.LUMA import LUMA
 
 from ultralytics.nn.add.downSample.ContextGuidedDConv import ContextGuidedDConv
@@ -1644,8 +1644,6 @@ def parse_model(d, ch, verbose=True):
             C3k2_DIFF,
             C2PSA_DIFF,
             APCM,
-            MetaOmniBlock,
-            MetaOmniBlock_DIFF
         }
     )
     repeat_modules = frozenset(
@@ -1708,8 +1706,6 @@ def parse_model(d, ch, verbose=True):
             GatedAttention,
             OmniGatedSDPA,
             APCM,
-            MetaOmniBlock,
-            MetaOmniBlock_DIFF
         }:
             c2 = ch[f]
             args = [c2, *args]
