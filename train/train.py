@@ -7,6 +7,7 @@ from pathlib import Path
 
 from datetime import datetime
 
+# 路径初始化
 base_path = Path(__file__).resolve().parent.parent
 if str(base_path) not in sys.path:
     sys.path.insert(0, str(base_path))
@@ -110,11 +111,7 @@ if __name__ == "__main__":
     sys.stderr.write = _capture_write_factory(_stderr_orig.write)
 
     # --- 训练核心块 ---
-    status = "UNKNOWN"
-    err_text = ""
     t0 = datetime.now()
-    # 初始 save_dir 设为预想路径，防止 train 还没跑就崩溃
-    final_save_dir = save_path / run_name
 
     try:
         model_cfg = base_path / "models" / version / model_name
@@ -136,50 +133,36 @@ if __name__ == "__main__":
             project=str(save_path),
             name=run_name,
             seed=seed,
-            exist_ok=True,  # 允许在已创建的文件夹中继续，不生成副本
+            exist_ok=True,
         )
-        # 获取 Ultralytics 最终确定的保存路径
-        final_save_dir = Path(results.save_dir)
-        status = "FINISHED"
 
-    except Exception:
-        status = "FAILED"
-        err_text = traceback.format_exc()
-        # 失败时手动创建文件夹以便保存报错日志
-        final_save_dir.mkdir(parents=True, exist_ok=True)
-
-    finally:
-        # 恢复标准输出
+        # 1. 只有成功运行到这里，才会执行后续逻辑
+        # 先恢复输出流，确保后续打印正常
         sys.stdout.write, sys.stderr.write = _stdout_orig.write, _stderr_orig.write
 
-        # 保存日志文件
+        # 2. 保存日志文件
+        final_save_dir = Path(results.save_dir)
         log_path = final_save_dir / "run.log"
-        try:
-            with open(log_path, "w", encoding="utf-8", errors="ignore") as f:
-                f.writelines(_buf)
-        except Exception as e:
-            print(f"Failed to write run.log: {e}")
+        with open(log_path, "w", encoding="utf-8", errors="ignore") as f:
+            f.writelines(_buf)
 
-        # 发送邮件通知
-        try:
-            elapsed = datetime.now() - t0
-            log_content = _read_text_safe(log_path)
+        # 3. 发送邮件
+        elapsed = datetime.now() - t0
+        log_content = _read_text_safe(log_path)
+        subject = f"[FINISHED] {run_name}"
+        header = (
+            f"Status: FINISHED\n"
+            f"Model: {model_name}\n"
+            f"Dataset: {dataset_name}\n"
+            f"Save Dir: {final_save_dir}\n"
+            f"Elapsed: {str(elapsed)}\n\n"
+        )
+        email_body = header + "Success!\n\n---- Last Logs ----\n" + log_content
+        _send_email_safe(receiver, subject, email_body)
 
-            subject = f"[{status}] {run_name}"
-            header = (
-                f"Status: {status}\n"
-                f"Model: {model_name}\n"
-                f"Dataset: {dataset_name}\n"
-                f"Save Dir: {final_save_dir}\n"
-                f"Elapsed: {str(elapsed)}\n\n"
-            )
-
-            email_body = header + ("---- Error ----\n" + err_text if status == "FAILED" else "Success!\n")
-            email_body += "\n---- Last Logs ----\n" + log_content
-
-            _send_email_safe(receiver, subject, email_body)
-        except Exception as e:
-            print(f"Email notification failed: {e}")
-
-    if status == "FAILED":
+    except Exception:
+        sys.stdout.write, sys.stderr.write = _stdout_orig.write, _stderr_orig.write
+        traceback.print_exc()
         sys.exit(1)
+    finally:
+        sys.stdout.write, sys.stderr.write = _stdout_orig.write, _stderr_orig.write

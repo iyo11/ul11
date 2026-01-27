@@ -4,17 +4,20 @@ train:
     batch_size: 8
     workers: 4
     cache: false
-
   linux:
     datasets_path: "../datasets"
     batch_size: 24
     workers: 10
     cache: true
 
+  model_name:
+    - "yolo11n_SADConv.yaml"
+    - "yolo11n_SFEContextGuide.yaml"
+    - "yolo11n_MyCustomModule.yaml"
+
+  dataset_yaml: "/NWPU_VHR.yaml"
   epochs: 300
   close_mosaic: 45
-  model_name: "yolo11n_C3K2Dual.yaml"
-  dataset_yaml: "/NWPU_VHR.yaml"
   seed: 42
   optimizer: "SGD"
   amp: false

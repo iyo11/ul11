@@ -19,13 +19,21 @@ from ultralytics.nn.add.attention.GAM import GAM
 from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
+from ultralytics.nn.add.block.C3K2DFF import C3k2_DFF_1, C3k2_DFF_2
 from ultralytics.nn.add.block.C3K2DIFF import C3k2_DIFF, C2PSA_DIFF
 from ultralytics.nn.add.block.C3K2DSConv import C3k2_DSConv
 from ultralytics.nn.add.block.C3K2DWRSeg import C3k2_DWRSeg
+from ultralytics.nn.add.block.C3K2Dual import C3k2_Dual, C2f_Dual
 from ultralytics.nn.add.block.C3K2FasterBlock import C3k2_FasterBlock
+from ultralytics.nn.add.block.C3K2HetConv import C3k2_HetConv1, C3k2_HetConv2
 from ultralytics.nn.add.block.C3K2MS import C3k2_MSBlcok
+from ultralytics.nn.add.block.C3K2MSCB import C3k2_MSCB1, C3k2_MSCB2
+from ultralytics.nn.add.block.C3K2ODConv import C3k2_ODConv, ODConv2d
+from ultralytics.nn.add.block.C3K2PConv import C3k2_PConv2, C3k2_PConv1
 from ultralytics.nn.add.block.C3K2SAConv import C3k2_SAConv
-from ultralytics.nn.add.block.C3K2_ScConv import C3k2_ScConv, ScConv
+from ultralytics.nn.add.block.C3K2ScConv import C3k2_ScConv, ScConv
+from ultralytics.nn.add.block.C3K2iAFF import C3k2_iAFF
+from ultralytics.nn.add.block.LAE import LAE
 from ultralytics.nn.add.concat.BiFPN import BiConcat
 from ultralytics.nn.add.block.C2PSA_DHOGSA import C2PSA_DHOGSA
 from ultralytics.nn.add.block.C3K2AK import C3k2_AKConv
@@ -1660,7 +1668,21 @@ def parse_model(d, ch, verbose=True):
             C3k2_DWRSeg,
             ScDConv,
             C3k2_ScConv,
-            ScConv
+            ScConv,
+            C3k2_MSCB1,
+            C3k2_MSCB2,
+            C3k2_PConv1,
+            C3k2_PConv2,
+            C3k2_ODConv,
+            ODConv2d,
+            LAE,
+            C3k2_iAFF,
+            C3k2_DFF_1,
+            C3k2_DFF_2,
+            C3k2_HetConv1,
+            C3k2_HetConv2,
+            C3k2_Dual,
+            C2f_Dual
         }
     )
     repeat_modules = frozenset(
@@ -1695,7 +1717,17 @@ def parse_model(d, ch, verbose=True):
             C3k2_DSConv,
             C3k2_SAConv,
             C3k2_DWRSeg,
-            C3k2_ScConv
+            C3k2_ScConv,
+            C3k2_MSCB1,
+            C3k2_MSCB2,
+            C3k2_PConv1,
+            C3k2_PConv2,
+            C3k2_ODConv,
+            C3k2_iAFF,
+            C3k2_HetConv1,
+            C3k2_HetConv2,
+            C3k2_Dual,
+            C2f_Dual
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -1728,7 +1760,8 @@ def parse_model(d, ch, verbose=True):
             CirculantAttention,
             GatedAttention,
             OmniGatedSDPA,
-            APCM
+            APCM,
+            LAE
         }:
             c2 = ch[f]
             args = [c2, *args]
