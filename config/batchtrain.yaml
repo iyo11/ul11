@@ -11,9 +11,19 @@ train:
     cache: true
 
   model_name:
-    - "yolo11n_SADConv.yaml"
-    - "yolo11n_SFEContextGuide.yaml"
-    - "yolo11n_MyCustomModule.yaml"
+    - "yolo11n_C3k2DFF1.yaml"
+    - "yolo11n_C3k2DFF2.yaml"
+    - "yolo11n_C3k2Dual.yaml"
+    - "yolo11n_C3k2HetConv1.yaml"
+    - "yolo11n_C3k2HetConv2.yaml"
+    - "yolo11n_C3k2iAFF.yaml"
+    - "yolo11n_C3k2MSCB1.yaml"
+    - "yolo11n_C3k2MSCB2.yaml"
+    - "yolo11n_C3k2ODConv.yaml"
+    - "yolo11n_C3k2PConv1.yaml"
+    - "yolo11n_C3k2PConv2.yaml"
+    - "yolo11n_LAE.yaml"
+    - "yolo11n_ODConv.yaml"
 
   dataset_yaml: "/NWPU_VHR.yaml"
   epochs: 300
