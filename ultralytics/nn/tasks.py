@@ -19,20 +19,37 @@ from ultralytics.nn.add.attention.GAM import GAM
 from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
+from ultralytics.nn.add.block.C3K2CGHalfConv import C3k2_CGHalfConv
+from ultralytics.nn.add.block.C3K2DEConv import C3k2_DEConv, C3k2_DEConv2
 from ultralytics.nn.add.block.C3K2DFF import C3k2_DFF_1, C3k2_DFF_2
 from ultralytics.nn.add.block.C3K2DIFF import C3k2_DIFF, C2PSA_DIFF
 from ultralytics.nn.add.block.C3K2DSConv import C3k2_DSConv
 from ultralytics.nn.add.block.C3K2DWRSeg import C3k2_DWRSeg
 from ultralytics.nn.add.block.C3K2Dual import C3k2_Dual, C2f_Dual
+from ultralytics.nn.add.block.C3K2DynamicConv import C3k2_GhostModule_DynamicConv
+from ultralytics.nn.add.block.C3K2FDConv import C3k2_FDConv
 from ultralytics.nn.add.block.C3K2FasterBlock import C3k2_FasterBlock
+from ultralytics.nn.add.block.C3K2FasterPConv import C3k2_FasterPConv
+from ultralytics.nn.add.block.C3K2GBConv import C3k2_GBConv
+from ultralytics.nn.add.block.C3K2GSConv import C3k2_GSConv
 from ultralytics.nn.add.block.C3K2HetConv import C3k2_HetConv1, C3k2_HetConv2
+from ultralytics.nn.add.block.C3K2IDConv import C3k2_ID, C3k2_INB
+from ultralytics.nn.add.block.C3K2LDConv import LDConv, C3k2_LDConv
+from ultralytics.nn.add.block.C3K2MRFAConv import C3k2_MRFAConv
 from ultralytics.nn.add.block.C3K2MS import C3k2_MSBlcok
 from ultralytics.nn.add.block.C3K2MSCB import C3k2_MSCB1, C3k2_MSCB2
 from ultralytics.nn.add.block.C3K2ODConv import C3k2_ODConv, ODConv2d
-from ultralytics.nn.add.block.C3K2PConv import C3k2_PConv2, C3k2_PConv1
+from ultralytics.nn.add.block.C3K2OREPA import C3k2_OREPA_neck, C3k2_OREPA_backbone, OREPA
+from ultralytics.nn.add.block.C3K2PConv import C3k2_PConv1, C3k2_PConv2
+from ultralytics.nn.add.block.C3K2PSPConv import C3k2_PSConv, C3k2_SPSConv
+from ultralytics.nn.add.block.C3K2RFAConv import RFAConv, C3k2_RFAConv
 from ultralytics.nn.add.block.C3K2SAConv import C3k2_SAConv
+from ultralytics.nn.add.block.C3K2SFS import C3k2_SFS
 from ultralytics.nn.add.block.C3K2ScConv import C3k2_ScConv, ScConv
+from ultralytics.nn.add.block.C3K2WConv import C3k2_WConv
 from ultralytics.nn.add.block.C3K2iAFF import C3k2_iAFF
+from ultralytics.nn.add.block.C3k2MSGDC import DSC3k2_MSGDC, MSGDC3k2
+from ultralytics.nn.add.block.C3k2MKP import C3k2_MKP
 from ultralytics.nn.add.block.LAE import LAE
 from ultralytics.nn.add.concat.BiFPN import BiConcat
 from ultralytics.nn.add.block.C2PSA_DHOGSA import C2PSA_DHOGSA
@@ -1596,7 +1613,7 @@ def parse_model(d, ch, verbose=True):
     ch = [ch]
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     base_modules = frozenset(
-        {
+        [
             Classify,
             Conv,
             ConvTranspose,
@@ -1682,8 +1699,33 @@ def parse_model(d, ch, verbose=True):
             C3k2_HetConv1,
             C3k2_HetConv2,
             C3k2_Dual,
-            C2f_Dual
-        }
+            C2f_Dual,
+            C3k2_FasterPConv,
+            RFAConv,
+            C3k2_RFAConv,
+            C3k2_WConv,
+            C3k2_SFS,
+            C3k2_CGHalfConv,
+            C3k2_FDConv,
+            C3k2_MRFAConv,
+            DSC3k2_MSGDC,
+            MSGDC3k2,
+            C3k2_ID,
+            C3k2_INB,
+            C3k2_MKP,
+            C3k2_DEConv,
+            C3k2_GSConv,
+            C3k2_GBConv,
+            LDConv,
+            C3k2_LDConv,
+            C3k2_GhostModule_DynamicConv,
+            C3k2_PSConv,
+            C3k2_SPSConv,
+            C3k2_OREPA_neck,
+            C3k2_OREPA_backbone,
+            OREPA,
+
+        ]
     )
     repeat_modules = frozenset(
         {
@@ -1727,7 +1769,30 @@ def parse_model(d, ch, verbose=True):
             C3k2_HetConv1,
             C3k2_HetConv2,
             C3k2_Dual,
-            C2f_Dual
+            C2f_Dual,
+            C3k2_FasterPConv,
+            C3k2_RFAConv,
+            C3k2_WConv,
+            C3k2_SFS,
+            C3k2_CGHalfConv,
+            C3k2_FDConv,
+            C3k2_MRFAConv,
+            DSC3k2_MSGDC,
+            MSGDC3k2,
+            C3k2_ID,
+            C3k2_INB,
+            C3k2_MKP,
+            C3k2_DEConv,
+            C3k2_GSConv,
+            C3k2_GBConv,
+            C3k2_LDConv,
+            C3k2_GhostModule_DynamicConv,
+            C3k2_PSConv,
+            C3k2_SPSConv,
+            C3k2_OREPA_neck,
+            C3k2_OREPA_backbone,
+
+
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
