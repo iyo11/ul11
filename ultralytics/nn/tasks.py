@@ -1731,6 +1731,7 @@ def parse_model(d, ch, verbose=True):
             WTFDown,
             DEConv,
             C3k2_WTSCConv,
+            C3K2StageWTConv
 
 
         ]
@@ -1800,6 +1801,7 @@ def parse_model(d, ch, verbose=True):
             C3k2_OREPA_neck,
             C3k2_OREPA_backbone,
             C3k2_WTSCConv,
+            C3K2StageWTConv
 
         }
     )
