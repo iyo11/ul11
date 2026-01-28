@@ -5,7 +5,7 @@ import pywt
 import pywt.data
 from functools import partial
 
-__all__ = ['C3K2StageWTConv']
+__all__ = ['C3k2_StageWTConv']
 
 
 def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
@@ -295,7 +295,7 @@ class C2f(nn.Module):
         return self.cv2(torch.cat(y, 1))
 
 
-class C3k2_WTConv(C2f):
+class C3k2_StageWTConv(C2f):
     """
     Faster Implementation of CSP Bottleneck with 2 convolutions.
     集成了 WTConv 的 C3k2 模块
@@ -318,7 +318,7 @@ if __name__ == "__main__":
 
     # 实例化模型
     # 这里 C3k2_WTConv 会调用 Bottleneck_WTConv -> WTConv2d -> MultiScaleBaseConv
-    model = C3k2_WTConv(64, 64, n=1)
+    model = C3k2_StageWTConv(64, 64, n=1)
 
     # 将模型转为推理模式 (验证 BN 层行为)
     model.eval()
