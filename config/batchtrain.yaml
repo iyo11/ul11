@@ -11,8 +11,8 @@ train:
     cache: true
 
   model_name:
-    - "yolo11n_C3K2WTSCConv.yaml"
-    - "yolo11n_C3k2WTSCConv_C3k2FDConv.yaml"
+    - "yolo11n_C3K2StageWTConv.yaml"
+    - "yolo11n_C3K2StageWTConv_C3k2FDConv.yaml"
 
   dataset_yaml: "/NWPU_VHR.yaml"
   epochs: 300
