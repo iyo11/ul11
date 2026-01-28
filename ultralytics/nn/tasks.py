@@ -59,10 +59,12 @@ from ultralytics.nn.add.block.C3K2GatedAttnetion import C3k2_GatedAttention, Gat
 from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv, WTConv2d
 from ultralytics.nn.add.block.C3k2CirculantAttention import C3k2_CirculantAttention
 from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
+from ultralytics.nn.add.downSample.FDConv import FDConv
 from ultralytics.nn.add.downSample.SADConv import SADConv
 from ultralytics.nn.add.downSample.AKDConv import AKDConv
 from ultralytics.nn.add.downSample.PWDConv import PWD2d
 from ultralytics.nn.add.downSample.SCDConv import ScDConv
+from ultralytics.nn.add.downSample.WTFDConv import WTFDown
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
@@ -1724,6 +1726,9 @@ def parse_model(d, ch, verbose=True):
             C3k2_OREPA_neck,
             C3k2_OREPA_backbone,
             OREPA,
+            FDConv,
+            WTFDown
+
 
         ]
     )
