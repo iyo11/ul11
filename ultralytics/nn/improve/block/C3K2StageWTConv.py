@@ -48,41 +48,34 @@ def inverse_wavelet_transform(x, filters):
 
 
 class MultiScaleBaseConv(nn.Module):
-    """
-    使用多分支非对称卷积和空洞卷积替代标准 5x5 卷积。
-    提供等效 3x3, 5x5, 7x7 的感受野，计算量增加较少。
-    """
-
     def __init__(self, channels):
         super().__init__()
 
         # 分支1: 等效 3x3
-        # 1x3 + 3x1 DW Conv
         self.branch1 = nn.Sequential(
-            nn.Conv2d(channels, channels, (1, 3), stride=1, padding=(0, 1), groups=channels, bias=False),
-            nn.Conv2d(channels, channels, (3, 1), stride=1, padding=(1, 0), groups=channels, bias=False)
+            nn.Conv2d(channels, channels, (1, 3), 1, (0, 1), groups=channels, bias=False),
+            nn.Conv2d(channels, channels, (3, 1), 1, (1, 0), groups=channels, bias=False),
         )
 
-        # 分支2: 等效 5x5 (使用 dilation=2 的 3x3 拆解)
-        # padding = dilation * (kernel_size - 1) // 2 = 2 * 2 // 2 = 2
+        # 分支2: 等效 5x5 (dilation=2 的 1x3 + 3x1)
         self.branch2 = nn.Sequential(
-            nn.Conv2d(channels, channels, (1, 3), stride=1, padding=(0, 2), dilation=2, groups=channels, bias=False),
-            nn.Conv2d(channels, channels, (3, 1), stride=1, padding=(2, 0), dilation=2, groups=channels, bias=False)
+            nn.Conv2d(channels, channels, (1, 3), 1, (0, 2), dilation=2, groups=channels, bias=False),
+            nn.Conv2d(channels, channels, (3, 1), 1, (2, 0), dilation=2, groups=channels, bias=False),
         )
 
-        # 分支3: 等效 7x7 (直接用 1x7 + 7x1)
+        # 分支3: 等效 7x7，但更省算力 (dilation=3 的 1x3 + 3x1)
         self.branch3 = nn.Sequential(
-            nn.Conv2d(channels, channels, (1, 7), stride=1, padding=(0, 3), groups=channels, bias=False),
-            nn.Conv2d(channels, channels, (7, 1), stride=1, padding=(3, 0), groups=channels, bias=False)
+            nn.Conv2d(channels, channels, (1, 3), 1, (0, 3), dilation=3, groups=channels, bias=False),
+            nn.Conv2d(channels, channels, (3, 1), 1, (3, 0), dilation=3, groups=channels, bias=False),
         )
 
-        # 最后的 BN 用于融合特征分布
-        self.bn = nn.BatchNorm2d(channels)
+        # 如果你决定去 BN，就删掉这一行；要保留就留着
+        #self.bn = nn.BatchNorm2d(channels)
 
     def forward(self, x):
-        # 并行计算三个分支并相加
         out = self.branch1(x) + self.branch2(x) + self.branch3(x)
-        return self.bn(out)
+        #out = self.bn(out)  # 如果去 BN：直接 return out
+        return out
 
 
 class _ScaleModule(nn.Module):
