@@ -63,20 +63,10 @@ class MultiScaleBaseConv(nn.Module):
             nn.Conv2d(channels, channels, (3, 1), 1, (2, 0), dilation=2, groups=channels, bias=False),
         )
 
-        # 分支3: 等效 7x7，但更省算力 (dilation=3 的 1x3 + 3x1)
-        self.branch3 = nn.Sequential(
-            nn.Conv2d(channels, channels, (1, 3), 1, (0, 3), dilation=3, groups=channels, bias=False),
-            nn.Conv2d(channels, channels, (3, 1), 1, (3, 0), dilation=3, groups=channels, bias=False),
-        )
-
-        # 如果你决定去 BN，就删掉这一行；要保留就留着
-        #self.bn = nn.BatchNorm2d(channels)
-
     def forward(self, x):
-        out = self.branch1(x) + self.branch2(x) + self.branch3(x)
+        out = self.branch1(x) + self.branch2(x)
         #out = self.bn(out)  # 如果去 BN：直接 return out
         return out
-
 
 class _ScaleModule(nn.Module):
     def __init__(self, dims, init_scale=1.0, init_bias=0):
