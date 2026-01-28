@@ -12,7 +12,9 @@ train:
 
   model_name:
     - "yolo11n_C3K2CGHalfConvWTConv.yaml"
+    - "yolo11n_C3K2CGHalfConvWTConv5.yaml"
     - "yolo11n_C3K2CGHalfWT_C3K2FD.yaml"
+    - "yolo11n_C3K2CGHalfWT_C3K2FD5.yaml"
 
   dataset_yaml: "/NWPU_VHR.yaml"
   epochs: 300
