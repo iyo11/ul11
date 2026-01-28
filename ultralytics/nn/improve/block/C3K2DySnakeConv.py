@@ -3,20 +3,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
 import pywt
-import math
 
-__all__ = ['C3k2_SnakeWT']
+__all = ['C3k2_SnakeWT']
 
+# =========================
+# wavelet helpers (保持你原来的也行)
+# =========================
 
-# ==============================================================================
-# 1. 基础工具函数
-# ==============================================================================
-
-def autopad(k, p=None, d=1):
+def autopad(k, p=None, d=1):  # kernel, padding, dilation
+    """Pad to 'same' shape outputs."""
     if d > 1:
-        k = d * (k - 1) + 1 if isinstance(k, int) else [d * (x - 1) + 1 for x in k]
+        k = d * (k - 1) + 1 if isinstance(k, int) else [d * (x - 1) + 1 for x in k]  # actual kernel-size
     if p is None:
-        p = k // 2 if isinstance(k, int) else [x // 2 for x in k]
+        p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
 
 
@@ -24,175 +23,224 @@ def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
     w = pywt.Wavelet(wave)
     dec_hi = torch.tensor(w.dec_hi[::-1], dtype=type)
     dec_lo = torch.tensor(w.dec_lo[::-1], dtype=type)
-    dec_filters = torch.stack([dec_lo.unsqueeze(0) * dec_lo.unsqueeze(1),
-                               dec_lo.unsqueeze(0) * dec_hi.unsqueeze(1),
-                               dec_hi.unsqueeze(0) * dec_lo.unsqueeze(1),
-                               dec_hi.unsqueeze(0) * dec_hi.unsqueeze(1)], dim=0)
+    dec_filters = torch.stack([
+        dec_lo.unsqueeze(0) * dec_lo.unsqueeze(1),
+        dec_lo.unsqueeze(0) * dec_hi.unsqueeze(1),
+        dec_hi.unsqueeze(0) * dec_lo.unsqueeze(1),
+        dec_hi.unsqueeze(0) * dec_hi.unsqueeze(1)
+    ], dim=0)
     dec_filters = dec_filters[:, None].repeat(in_size, 1, 1, 1)
 
     rec_hi = torch.tensor(w.rec_hi[::-1], dtype=type).flip(dims=[0])
     rec_lo = torch.tensor(w.rec_lo[::-1], dtype=type).flip(dims=[0])
-    rec_filters = torch.stack([rec_lo.unsqueeze(0) * rec_lo.unsqueeze(1),
-                               rec_lo.unsqueeze(0) * rec_hi.unsqueeze(1),
-                               rec_hi.unsqueeze(0) * rec_lo.unsqueeze(1),
-                               rec_hi.unsqueeze(0) * rec_hi.unsqueeze(1)], dim=0)
+    rec_filters = torch.stack([
+        rec_lo.unsqueeze(0) * rec_lo.unsqueeze(1),
+        rec_lo.unsqueeze(0) * rec_hi.unsqueeze(1),
+        rec_hi.unsqueeze(0) * rec_lo.unsqueeze(1),
+        rec_hi.unsqueeze(0) * rec_hi.unsqueeze(1)
+    ], dim=0)
     rec_filters = rec_filters[:, None].repeat(out_size, 1, 1, 1)
     return dec_filters, rec_filters
 
 
 def wavelet_transform(x, filters):
     b, c, h, w = x.shape
-    pad = (filters.shape[2] // 2 - 1, filters.shape[3] // 2 - 1)
-    x = F.conv2d(x, filters, stride=2, groups=c, padding=pad)
+    # 更通用一点的 padding（对 db2/db4 之类更稳）
+    pad_h = (filters.shape[2] - 2) // 2
+    pad_w = (filters.shape[3] - 2) // 2
+    x = F.conv2d(x, filters, stride=2, groups=c, padding=(pad_h, pad_w))
     x = x.reshape(b, c, 4, h // 2, w // 2)
     return x
 
 
 def inverse_wavelet_transform(x, filters):
     b, c, _, h_half, w_half = x.shape
-    pad = (filters.shape[2] // 2 - 1, filters.shape[3] // 2 - 1)
+    pad_h = (filters.shape[2] - 2) // 2
+    pad_w = (filters.shape[3] - 2) // 2
     x = x.reshape(b, c * 4, h_half, w_half)
-    x = F.conv_transpose2d(x, filters, stride=2, groups=c, padding=pad)
+    x = F.conv_transpose2d(x, filters, stride=2, groups=c, padding=(pad_h, pad_w))
     return x
 
 
 class _ScaleModule(nn.Module):
     def __init__(self, dims, init_scale=1.0):
-        super(_ScaleModule, self).__init__()
-        self.dims = dims
+        super().__init__()
         self.weight = nn.Parameter(torch.ones(*dims) * init_scale)
 
     def forward(self, x):
-        return torch.mul(self.weight, x)
+        return x * self.weight
 
 
-# ==============================================================================
-# 2. 核心模块: Dynamic Snake Conv (DSConv)
-# ==============================================================================
+# =========================
+# 改进版 DySnakeConv
+# =========================
 
 class DySnakeConv(nn.Module):
-    def __init__(self, channels, kernel_size=3, act=nn.ReLU):
+    """
+    更稳健的 snake-style deform:
+    - offset 直接输出 2 通道 (dx, dy)
+    - tanh 限幅，避免漂移爆掉
+    - base grid cache（按 H,W 缓存）
+    """
+    def __init__(self, channels, kernel_size=3, act=nn.ReLU, max_offset=None):
         super().__init__()
-        self.kernel_size = kernel_size
         self.channels = channels
+        self.kernel_size = kernel_size
+        # 限幅：默认给 (k//2) 像素
+        self.max_offset = float(max_offset if max_offset is not None else (kernel_size // 2))
 
-        # [Fix 1] 修复 groups 问题: 将 groups 改为 1
-        # 即使输入 channel 很大，offset 只需要 2*K 个通道，必须用标准卷积生成
-        self.offset_conv = nn.Conv2d(channels, 2 * kernel_size, kernel_size=kernel_size,
-                                     stride=1, padding=kernel_size // 2, groups=1, bias=True)
+        # 直接输出 2 通道 (dx, dy)
+        self.offset_conv = nn.Conv2d(
+            channels, 2, kernel_size=kernel_size, stride=1,
+            padding=kernel_size // 2, groups=1, bias=True
+        )
+        nn.init.constant_(self.offset_conv.weight, 0.)
+        nn.init.constant_(self.offset_conv.bias, 0.)
 
-        nn.init.constant_(self.offset_conv.weight, 0)
-        nn.init.constant_(self.offset_conv.bias, 0)
-
-        self.dw_conv = nn.Conv2d(channels, channels, kernel_size=kernel_size,
-                                 stride=1, padding=kernel_size // 2, groups=channels, bias=False)
+        self.dw_conv = nn.Conv2d(
+            channels, channels, kernel_size=kernel_size,
+            stride=1, padding=kernel_size // 2, groups=channels, bias=False
+        )
         self.act = act()
+
+        # grid cache: key=(H,W,device)
+        self._grid_cache = {}
+
+    @torch.no_grad()
+    def _get_base_grid(self, b, h, w, device, dtype):
+        key = (h, w, device)
+        grid = self._grid_cache.get(key, None)
+        if grid is None or grid.dtype != dtype:
+            yy = torch.arange(h, device=device, dtype=dtype)
+            xx = torch.arange(w, device=device, dtype=dtype)
+            y, x = torch.meshgrid(yy, xx, indexing='ij')
+            # [1,2,H,W]
+            grid = torch.stack([x, y], dim=0).unsqueeze(0)  # x first, y second
+            self._grid_cache[key] = grid
+        return grid.repeat(b, 1, 1, 1)
 
     def forward(self, x):
         b, c, h, w = x.shape
-        offset = self.offset_conv(x)
+        dtype = x.dtype
 
-        y_iter, x_iter = torch.meshgrid(torch.arange(h), torch.arange(w), indexing='ij')
-        base_grid = torch.stack([x_iter, y_iter], dim=0).to(x.device).float()
-        base_grid = base_grid.unsqueeze(0).repeat(b, 1, 1, 1)
+        offset = self.offset_conv(x)               # [B,2,H,W]
+        offset = torch.tanh(offset) * self.max_offset
 
-        offset_x = offset[:, :self.kernel_size, :, :].mean(dim=1, keepdim=True)
-        offset_y = offset[:, self.kernel_size:, :, :].mean(dim=1, keepdim=True)
-        grid_offset = torch.cat([offset_x, offset_y], dim=1)
+        base_grid = self._get_base_grid(b, h, w, x.device, dtype)  # [B,2,H,W]
+        final_grid = base_grid + offset
 
-        final_grid = base_grid + grid_offset
+        # normalize to [-1,1]
         final_grid[:, 0] = 2.0 * final_grid[:, 0] / max(w - 1, 1) - 1.0
         final_grid[:, 1] = 2.0 * final_grid[:, 1] / max(h - 1, 1) - 1.0
-        final_grid = final_grid.permute(0, 2, 3, 1)
+        final_grid = final_grid.permute(0, 2, 3, 1)  # [B,H,W,2]
 
-        x_deformed = F.grid_sample(x, final_grid, mode='bilinear', padding_mode='reflection', align_corners=True)
+        # align_corners=False 通常更稳，边缘伪影更少
+        x_deformed = F.grid_sample(
+            x, final_grid,
+            mode='bilinear',
+            padding_mode='reflection',
+            align_corners=False
+        )
         out = self.dw_conv(x_deformed)
         return self.act(out)
 
 
-# ==============================================================================
-# 3. 核心模块: Snake-WTConv2d
-# ==============================================================================
+# =========================
+# 改进版 Snake_WTConv2d
+# =========================
 
 class Snake_WTConv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, stride=1, bias=True, wt_levels=1, wt_type='db1'):
-        super(Snake_WTConv2d, self).__init__()
+    """
+    改进点：
+    - filters 自动转到 x 的 dtype/device（兼容 AMP）
+    - base_conv 使用 kernel_size 参数（不误导）
+    - wavelet 分支加一个可学习 gamma，默认 0（更稳的“安全起步”）
+    - stride 用 avg_pool2d（更合理）
+    """
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, bias=True,
+                 wt_levels=1, wt_type='db1'):
+        super().__init__()
         assert in_channels == out_channels
         self.in_channels = in_channels
         self.wt_levels = wt_levels
         self.stride = stride
 
-        self.wt_filter, self.iwt_filter = create_wavelet_filter(wt_type, in_channels, in_channels, torch.float)
-        self.wt_filter = nn.Parameter(self.wt_filter, requires_grad=False)
-        self.iwt_filter = nn.Parameter(self.iwt_filter, requires_grad=False)
+        wt_filter, iwt_filter = create_wavelet_filter(wt_type, in_channels, in_channels, torch.float32)
+        self.register_buffer("wt_filter", wt_filter, persistent=False)
+        self.register_buffer("iwt_filter", iwt_filter, persistent=False)
 
-        self.wt_function = partial(wavelet_transform, filters=self.wt_filter)
-        self.iwt_function = partial(inverse_wavelet_transform, filters=self.iwt_filter)
-
-        self.base_conv = nn.Conv2d(in_channels, in_channels, 3, padding=1, stride=1,
-                                   groups=in_channels, bias=bias)
-        self.base_scale = _ScaleModule([1, in_channels, 1, 1])
+        self.base_conv = nn.Conv2d(
+            in_channels, in_channels, kernel_size,
+            padding=kernel_size // 2, stride=1,
+            groups=in_channels, bias=bias
+        )
+        self.base_scale = _ScaleModule([1, in_channels, 1, 1], init_scale=1.0)
 
         self.wavelet_convs = nn.ModuleList()
+        self.wavelet_scale = nn.ModuleList()
         for _ in range(self.wt_levels):
-            self.wavelet_convs.append(
-                nn.Sequential(
-                    DySnakeConv(in_channels * 4, kernel_size=3),
-                    nn.Conv2d(in_channels * 4, in_channels * 4, 1, groups=in_channels, bias=False)
-                )
-            )
-        self.wavelet_scale = nn.ModuleList(
-            [_ScaleModule([1, in_channels * 4, 1, 1], init_scale=0.1) for _ in range(self.wt_levels)]
-        )
+            self.wavelet_convs.append(nn.Sequential(
+                DySnakeConv(in_channels * 4, kernel_size=3),
+                nn.Conv2d(in_channels * 4, in_channels * 4, 1, groups=in_channels, bias=False)
+            ))
+            self.wavelet_scale.append(_ScaleModule([1, in_channels * 4, 1, 1], init_scale=0.1))
 
-        if self.stride > 1:
-            self.stride_filter = nn.Parameter(torch.ones(in_channels, 1, 1, 1), requires_grad=False)
-            self.do_stride = lambda x_in: F.conv2d(x_in, self.stride_filter, bias=None, stride=self.stride,
-                                                   groups=in_channels)
-        else:
-            self.do_stride = None
+        # 安全起步：wavelet 分支默认不干扰（训练更稳）
+        self.gamma = nn.Parameter(torch.zeros(1))
+
+        self.do_stride = (stride > 1)
 
     def forward(self, x):
-        x_ll_in_levels = []
-        x_h_in_levels = []
-        shapes_in_levels = []
+        # 兼容 AMP：filters 跟着 x 的 dtype/device
+        wt_f = self.wt_filter.to(device=x.device, dtype=x.dtype)
+        iwt_f = self.iwt_filter.to(device=x.device, dtype=x.dtype)
+
+        wt_fn = partial(wavelet_transform, filters=wt_f)
+        iwt_fn = partial(inverse_wavelet_transform, filters=iwt_f)
+
+        x_ll_in_levels, x_h_in_levels, shapes_in_levels = [], [], []
         curr_x_ll = x
 
         for i in range(self.wt_levels):
             curr_shape = curr_x_ll.shape
             shapes_in_levels.append(curr_shape)
-            if (curr_shape[2] % 2 > 0) or (curr_shape[3] % 2 > 0):
-                curr_pads = (0, curr_shape[3] % 2, 0, curr_shape[2] % 2)
-                curr_x_ll = F.pad(curr_x_ll, curr_pads)
 
-            curr_x = self.wt_function(curr_x_ll)
+            # odd size pad
+            if (curr_shape[2] % 2) or (curr_shape[3] % 2):
+                curr_x_ll = F.pad(curr_x_ll, (0, curr_shape[3] % 2, 0, curr_shape[2] % 2))
+
+            curr_x = wt_fn(curr_x_ll)                # [B,C,4,H/2,W/2]
             curr_x_ll = curr_x[:, :, 0, :, :]
 
             shape_x = curr_x.shape
             curr_x_tag = curr_x.reshape(shape_x[0], shape_x[1] * 4, shape_x[3], shape_x[4])
             curr_x_tag = self.wavelet_scale[i](self.wavelet_convs[i](curr_x_tag))
             curr_x_tag = curr_x_tag.reshape(shape_x)
+
             x_ll_in_levels.append(curr_x_tag[:, :, 0, :, :])
             x_h_in_levels.append(curr_x_tag[:, :, 1:4, :, :])
 
         next_x_ll = 0
-        for i in range(self.wt_levels - 1, -1, -1):
+        for _ in range(self.wt_levels):
             curr_x_ll = x_ll_in_levels.pop()
             curr_x_h = x_h_in_levels.pop()
             curr_shape = shapes_in_levels.pop()
+
             curr_x_ll = curr_x_ll + next_x_ll
             curr_x = torch.cat([curr_x_ll.unsqueeze(2), curr_x_h], dim=2)
-            next_x_ll = self.iwt_function(curr_x)
+            next_x_ll = iwt_fn(curr_x)
             next_x_ll = next_x_ll[:, :, :curr_shape[2], :curr_shape[3]]
 
-        x_tag = next_x_ll
-        x = self.base_scale(self.base_conv(x))
-        x = x + x_tag
+        x_wt = next_x_ll                           # wavelet branch
+        x_base = self.base_scale(self.base_conv(x)) # base branch
 
-        if self.do_stride is not None:
-            x = self.do_stride(x)
-        return x
+        x_out = x_base + self.gamma * x_wt
 
+        if self.do_stride:
+            # 比 ones depthwise stride 更稳（不会放大幅值）
+            x_out = F.avg_pool2d(x_out, kernel_size=self.stride, stride=self.stride)
+
+        return x_out
 
 # ==============================================================================
 # 4. YOLO 架构组件
