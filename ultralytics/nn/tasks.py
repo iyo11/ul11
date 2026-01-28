@@ -20,7 +20,7 @@ from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
 from ultralytics.nn.add.block.C3K2CGHalfConv import C3k2_CGHalfConv
-from ultralytics.nn.add.block.C3K2DEConv import C3k2_DEConv, C3k2_DEConv2
+from ultralytics.nn.add.block.C3K2DEConv import C3k2_DEConv, C3k2_DEConv2, DEConv
 from ultralytics.nn.add.block.C3K2DFF import C3k2_DFF_1, C3k2_DFF_2
 from ultralytics.nn.add.block.C3K2DIFF import C3k2_DIFF, C2PSA_DIFF
 from ultralytics.nn.add.block.C3K2DSConv import C3k2_DSConv
@@ -1727,7 +1727,8 @@ def parse_model(d, ch, verbose=True):
             C3k2_OREPA_backbone,
             OREPA,
             FDConv,
-            WTFDown
+            WTFDown,
+            DEConv
 
 
         ]
@@ -1831,7 +1832,8 @@ def parse_model(d, ch, verbose=True):
             GatedAttention,
             OmniGatedSDPA,
             APCM,
-            LAE
+            LAE,
+            DEConv
         }:
             c2 = ch[f]
             args = [c2, *args]
