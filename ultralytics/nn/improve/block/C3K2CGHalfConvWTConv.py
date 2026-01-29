@@ -7,73 +7,77 @@ import pywt.data
 
 __all__ = ['C3k2_CGHalfWTConv']
 
-
-# ==========================================
-# 1. CGHalfConv 及其组件 (你提供的代码)
-# ==========================================
+# =========================================================
+# 1) CGHalfConv (更保守版：n_div 默认=4，避免过抑制)
+# =========================================================
 
 class HalfConv(nn.Module):
-    def __init__(self, dim, n_div=2):
+    """
+    将通道分成 [conv_part, untouched_part]，只对 conv_part 做 DWConv
+    n_div 越大：参与卷积的通道越少 → 越保守 → 更利于 mAP50/召回
+    """
+    def __init__(self, dim, n_div=4, k=5):
         super().__init__()
-        self.dim_conv3 = dim // n_div
-        self.dim_untouched = dim - self.dim_conv3
-        self.partial_conv3 = nn.Conv2d(self.dim_conv3, self.dim_conv3, 3, 1, 1, bias=False)
+        assert n_div >= 2
+        self.dim_conv = dim // n_div
+        self.dim_untouched = dim - self.dim_conv
+        p = k // 2
+        self.partial_conv = nn.Conv2d(self.dim_conv, self.dim_conv, k, 1, p, groups=self.dim_conv, bias=False)
 
     def forward(self, x):
-        x1, x2 = torch.split(x, [self.dim_conv3, self.dim_untouched], dim=1)
-        x1 = self.partial_conv3(x1)
-        x = torch.cat((x1, x2), 1)
-        return x
+        x1, x2 = torch.split(x, [self.dim_conv, self.dim_untouched], dim=1)
+        x1 = self.partial_conv(x1)
+        return torch.cat((x1, x2), dim=1)
 
 
 class CGHalfConv(nn.Module):
-    def __init__(self, dim):
-        super(CGHalfConv, self).__init__()
-        self.div_dim = int(dim / 3)
-        self.remainder_dim = dim % 3
-        self.p1 = HalfConv(self.div_dim, 2)
-        self.p2 = HalfConv(self.div_dim, 2)
-        self.p3 = HalfConv(self.div_dim + self.remainder_dim, 2)
+    """
+    3-way split + each part HalfConv + residual
+    """
+    def __init__(self, dim, k=5, n_div=4):
+        super().__init__()
+        self.div_dim = dim // 3
+        self.rem_dim = dim - 2 * self.div_dim
+
+        self.p1 = HalfConv(self.div_dim, n_div=n_div, k=k)
+        self.p2 = HalfConv(self.div_dim, n_div=n_div, k=k)
+        self.p3 = HalfConv(self.rem_dim, n_div=n_div, k=k)
 
     def forward(self, x):
-        # 保留输入用于残差连接
-        y = x
-        # 将输入在通道维度上拆分为三部分
-        x1, x2, x3 = torch.split(x, [self.div_dim, self.div_dim, self.div_dim + self.remainder_dim], dim=1)
-        # 分别送入对应的 HalfConv 模块
+        shortcut = x
+        x1, x2, x3 = torch.split(x, [self.div_dim, self.div_dim, self.rem_dim], dim=1)
         x1 = self.p1(x1)
         x2 = self.p2(x2)
         x3 = self.p3(x3)
-        # 拼接处理后的三个部分
-        x = torch.cat((x1, x2, x3), 1)
-        # 加上残差，增强训练稳定性和特征表达能力
-        return x + y
+        x = torch.cat((x1, x2, x3), dim=1)
+        return x + shortcut
 
 
-# ==========================================
-# 2. Wavelet 工具函数
-# ==========================================
+# =========================================================
+# 2) Wavelet utils (保持你原逻辑)
+# =========================================================
 
 def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
     w = pywt.Wavelet(wave)
     dec_hi = torch.tensor(w.dec_hi[::-1], dtype=type)
     dec_lo = torch.tensor(w.dec_lo[::-1], dtype=type)
-    dec_filters = torch.stack([dec_lo.unsqueeze(0) * dec_lo.unsqueeze(1),
-                               dec_lo.unsqueeze(0) * dec_hi.unsqueeze(1),
-                               dec_hi.unsqueeze(0) * dec_lo.unsqueeze(1),
-                               dec_hi.unsqueeze(0) * dec_hi.unsqueeze(1)], dim=0)
-
+    dec_filters = torch.stack([
+        dec_lo.unsqueeze(0) * dec_lo.unsqueeze(1),
+        dec_lo.unsqueeze(0) * dec_hi.unsqueeze(1),
+        dec_hi.unsqueeze(0) * dec_lo.unsqueeze(1),
+        dec_hi.unsqueeze(0) * dec_hi.unsqueeze(1)
+    ], dim=0)
     dec_filters = dec_filters[:, None].repeat(in_size, 1, 1, 1)
 
     rec_hi = torch.tensor(w.rec_hi[::-1], dtype=type).flip(dims=[0])
     rec_lo = torch.tensor(w.rec_lo[::-1], dtype=type).flip(dims=[0])
-    rec_filters = torch.stack([rec_lo.unsqueeze(0) * rec_lo.unsqueeze(1),
-                               rec_lo.unsqueeze(0) * rec_hi.unsqueeze(1),
-                               rec_hi.unsqueeze(0) * rec_lo.unsqueeze(1),
-                               rec_hi.unsqueeze(0) * rec_hi.unsqueeze(1)], dim=0)
-
+    rec_filters = torch.stack([
+        rec_lo.unsqueeze(0) * rec_lo.unsqueeze(1),
+        rec_lo.unsqueeze(0) * rec_hi.unsqueeze(1),
+        rec_hi.unsqueeze(0) * rec_lo.unsqueeze(1),
+        rec_hi.unsqueeze(0) * rec_hi.unsqueeze(1)
+    ], dim=0)
     rec_filters = rec_filters[:, None].repeat(out_size, 1, 1, 1)
-
     return dec_filters, rec_filters
 
 
@@ -81,89 +85,111 @@ def wavelet_transform(x, filters):
     b, c, h, w = x.shape
     pad = (filters.shape[2] // 2 - 1, filters.shape[3] // 2 - 1)
     x = F.conv2d(x, filters, stride=2, groups=c, padding=pad)
-    x = x.reshape(b, c, 4, h // 2, w // 2)
-    return x
+    return x.reshape(b, c, 4, h // 2, w // 2)
 
 
 def inverse_wavelet_transform(x, filters):
     b, c, _, h_half, w_half = x.shape
     pad = (filters.shape[2] // 2 - 1, filters.shape[3] // 2 - 1)
     x = x.reshape(b, c * 4, h_half, w_half)
-    x = F.conv_transpose2d(x, filters, stride=2, groups=c, padding=pad)
-    return x
+    return F.conv_transpose2d(x, filters, stride=2, groups=c, padding=pad)
 
 
 class _ScaleModule(nn.Module):
-    def __init__(self, dims, init_scale=1.0, init_bias=0):
-        super(_ScaleModule, self).__init__()
-        self.dims = dims
+    def __init__(self, dims, init_scale=1.0):
+        super().__init__()
         self.weight = nn.Parameter(torch.ones(*dims) * init_scale)
-        self.bias = None
 
     def forward(self, x):
-        return torch.mul(self.weight, x)
+        return self.weight * x
 
 
-# ==========================================
-# 3. 修改后的 WTConv2d (核心修改点)
-# ==========================================
+# =========================================================
+# 3) WTConv2d Vehicle-friendly 版本（核心：alpha/beta 残差融合）
+# =========================================================
 
 class WTConv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, stride=1, bias=True, wt_levels=1, wt_type='db1'):
-        super(WTConv2d, self).__init__()
-
+    """
+    Vehicle-friendly WTConv2d:
+      - base 分支改为 CGHalfConv（更保守可调 n_div）
+      - 引入 identity residual 混合：x_out = (1-a)*x + a*base + b*x_tag
+        其中 a,b 为可学习标量（每通道/全局都行，这里用全局标量最稳）
+    """
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=5,
+        stride=1,
+        bias=True,
+        wt_levels=1,
+        wt_type='db1',
+        # 新增参数
+        base_k=5,
+        base_n_div=4,          # 默认更保守：只卷 1/4 通道
+        alpha_init=0.50,       # identity 与 base 的混合系数
+        beta_init=0.25,        # wavelet 重构的强度（建议小一点更稳）
+        wavelet_scale_init=0.05 # 原来 0.1 偏激进，这里默认 0.05
+    ):
+        super().__init__()
         assert in_channels == out_channels
-
         self.in_channels = in_channels
         self.wt_levels = wt_levels
         self.stride = stride
-        self.dilation = 1
 
-        self.wt_filter, self.iwt_filter = create_wavelet_filter(wt_type, in_channels, in_channels, torch.float)
-        self.wt_filter = nn.Parameter(self.wt_filter, requires_grad=False)
-        self.iwt_filter = nn.Parameter(self.iwt_filter, requires_grad=False)
+        # wavelet filters
+        wt_filter, iwt_filter = create_wavelet_filter(wt_type, in_channels, in_channels, torch.float)
+        self.wt_filter = nn.Parameter(wt_filter, requires_grad=False)
+        self.iwt_filter = nn.Parameter(iwt_filter, requires_grad=False)
 
         self.wt_function = partial(wavelet_transform, filters=self.wt_filter)
         self.iwt_function = partial(inverse_wavelet_transform, filters=self.iwt_filter)
 
-        # -------------------------------------------------------------
-        # 修改点：将 base_conv 替换为 CGHalfConv
-        # -------------------------------------------------------------
-        self.base_conv = CGHalfConv(in_channels)
+        # base conv: CGHalfConv (DW-partial) + scale
+        self.base_conv = CGHalfConv(in_channels, k=base_k, n_div=base_n_div)
+        self.base_scale = _ScaleModule([1, in_channels, 1, 1], init_scale=1.0)
 
-        self.base_scale = _ScaleModule([1, in_channels, 1, 1])
+        # wavelet convs
+        self.wavelet_convs = nn.ModuleList([
+            nn.Conv2d(
+                in_channels * 4, in_channels * 4,
+                kernel_size, stride=1, padding='same', dilation=1,
+                groups=in_channels * 4, bias=False
+            ) for _ in range(self.wt_levels)
+        ])
+        self.wavelet_scale = nn.ModuleList([
+            _ScaleModule([1, in_channels * 4, 1, 1], init_scale=wavelet_scale_init)
+            for _ in range(self.wt_levels)
+        ])
 
-        self.wavelet_convs = nn.ModuleList(
-            [nn.Conv2d(in_channels * 4, in_channels * 4, kernel_size, padding='same', stride=1, dilation=1,
-                       groups=in_channels * 4, bias=False) for _ in range(self.wt_levels)]
-        )
-        self.wavelet_scale = nn.ModuleList(
-            [_ScaleModule([1, in_channels * 4, 1, 1], init_scale=0.1) for _ in range(self.wt_levels)]
-        )
-
+        # stride downsample (same as you)
         if self.stride > 1:
             self.stride_filter = nn.Parameter(torch.ones(in_channels, 1, 1, 1), requires_grad=False)
             self.do_stride = lambda x_in: F.conv2d(x_in, self.stride_filter, bias=None, stride=self.stride,
-                                                   groups=in_channels)
+                                                  groups=in_channels)
         else:
             self.do_stride = None
 
-    def forward(self, x):
-        x_ll_in_levels = []
-        x_h_in_levels = []
-        shapes_in_levels = []
+        # -------- 新增：可学习融合系数（标量，最稳、最不容易炸） --------
+        self.alpha = nn.Parameter(torch.tensor(float(alpha_init)))  # base 与 identity 的混合
+        self.beta  = nn.Parameter(torch.tensor(float(beta_init)))   # wavelet 分支强度
 
+    def forward(self, x):
+        # --- wavelet branch ---
+        x_ll_in_levels, x_h_in_levels, shapes_in_levels = [], [], []
         curr_x_ll = x
 
         for i in range(self.wt_levels):
             curr_shape = curr_x_ll.shape
             shapes_in_levels.append(curr_shape)
-            if (curr_shape[2] % 2 > 0) or (curr_shape[3] % 2 > 0):
+
+            # pad if odd
+            if (curr_shape[2] % 2) or (curr_shape[3] % 2):
                 curr_pads = (0, curr_shape[3] % 2, 0, curr_shape[2] % 2)
                 curr_x_ll = F.pad(curr_x_ll, curr_pads)
 
-            curr_x = self.wt_function(curr_x_ll)
-            curr_x_ll = curr_x[:, :, 0, :, :]
+            curr_x = self.wt_function(curr_x_ll)      # (b,c,4,h/2,w/2)
+            curr_x_ll = curr_x[:, :, 0, :, :]         # LL
 
             shape_x = curr_x.shape
             curr_x_tag = curr_x.reshape(shape_x[0], shape_x[1] * 4, shape_x[3], shape_x[4])
@@ -174,29 +200,32 @@ class WTConv2d(nn.Module):
             x_h_in_levels.append(curr_x_tag[:, :, 1:4, :, :])
 
         next_x_ll = 0
-
-        for i in range(self.wt_levels - 1, -1, -1):
+        for _ in range(self.wt_levels - 1, -1, -1):
             curr_x_ll = x_ll_in_levels.pop()
-            curr_x_h = x_h_in_levels.pop()
+            curr_x_h  = x_h_in_levels.pop()
             curr_shape = shapes_in_levels.pop()
 
             curr_x_ll = curr_x_ll + next_x_ll
-
             curr_x = torch.cat([curr_x_ll.unsqueeze(2), curr_x_h], dim=2)
             next_x_ll = self.iwt_function(curr_x)
-
             next_x_ll = next_x_ll[:, :, :curr_shape[2], :curr_shape[3]]
 
-        x_tag = next_x_ll
-        assert len(x_ll_in_levels) == 0
+        x_tag = next_x_ll  # wavelet reconstructed feature
 
-        x = self.base_scale(self.base_conv(x))
-        x = x + x_tag
+        # --- base branch (CGHalf) ---
+        base = self.base_scale(self.base_conv(x))
+
+        # --- fusion (关键) ---
+        # clamp 防止 alpha/beta 训练到奇怪范围导致不稳定
+        a = torch.clamp(self.alpha, 0.0, 1.0)
+        b = torch.clamp(self.beta,  0.0, 1.0)
+
+        out = (1.0 - a) * x + a * base + b * x_tag
 
         if self.do_stride is not None:
-            x = self.do_stride(x)
+            out = self.do_stride(out)
 
-        return x
+        return out
 
 
 # ==========================================
