@@ -68,7 +68,6 @@ from ultralytics.nn.add.downSample.WTFDConv import WTFDown
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
-from ultralytics.nn.improve.block import C3K2CGHalfConvWTConv5
 from ultralytics.nn.improve.block.C3K2CGHalfConvWTConv import C3k2_CGHalfWTConv
 from ultralytics.nn.improve.block.C3K2CGHalfConvWTConv5 import C3k2_CGHalfWTConv5
 from ultralytics.nn.improve.upsample.LUMA import LUMA
