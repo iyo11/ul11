@@ -70,6 +70,7 @@ from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
 from ultralytics.nn.improve.block import C3K2CGHalfConvWTConv5
 from ultralytics.nn.improve.block.C3K2CGHalfConvWTConv import C3k2_CGHalfWTConv
+from ultralytics.nn.improve.block.C3K2CGHalfConvWTConv5 import C3k2_CGHalfWTConv5
 from ultralytics.nn.improve.upsample.LUMA import LUMA
 
 from ultralytics.nn.add.downSample.ContextGuidedDConv import ContextGuidedDConv
@@ -1732,7 +1733,7 @@ def parse_model(d, ch, verbose=True):
             WTFDown,
             DEConv,
             C3k2_CGHalfWTConv,
-            C3K2CGHalfConvWTConv5
+            C3k2_CGHalfWTConv5
 
 
         ]
@@ -1802,7 +1803,7 @@ def parse_model(d, ch, verbose=True):
             C3k2_OREPA_neck,
             C3k2_OREPA_backbone,
             C3k2_CGHalfWTConv,
-            C3K2CGHalfConvWTConv5
+            C3k2_CGHalfWTConv5
 
         }
     )
