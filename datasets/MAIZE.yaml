@@ -1,4 +1,4 @@
-path: ../datas/MEIZE  # dataset root dir
+path: ../datas/MAIZE  # dataset root dir
 train: train/images
 val: valid/images
 
