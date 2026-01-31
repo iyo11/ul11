@@ -1,0 +1,13 @@
+path: ../datas/MEIZE  # dataset root dir
+train: train/images
+val: valid/images
+
+nc: 3
+names: ['maize', 'weedhe', 'weedkuo']
+
+roboflow:
+  workspace: new-workspace-imamk
+  project: maize-4zbtj
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/new-workspace-imamk/maize-4zbtj/dataset/1
