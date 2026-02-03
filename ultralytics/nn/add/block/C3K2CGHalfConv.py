@@ -4,7 +4,7 @@ from torch import Tensor
 from ultralytics.nn.modules.block import C3k
 from ultralytics.nn.modules import Bottleneck, Conv, C3k2
 
-__all__ = ['C3k2_CGHalfConv']
+__all__ = ['C3k2_CGHalfConv', 'CGHalfConv']
 
 
 class HalfConv(nn.Module):
