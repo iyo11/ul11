@@ -11,10 +11,10 @@ train:
     workers: 10
     cache: true
 
-  epochs: 300
-  close_mosaic: 45
-  model_name: "yolo11n.yaml"
-  dataset_yaml: "/MAIZE.yaml"
+  epochs: 200
+  close_mosaic: 10
+  model_name: "yolo11n_CGHalfConv_FPN.yaml"
+  dataset_yaml: "/NWPU_VHR.yaml"
   seed: 42
   optimizer: "SGD"
   amp: false
