@@ -19,7 +19,7 @@ from ultralytics.nn.add.attention.GAM import GAM
 from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
-from ultralytics.nn.add.block.C3K2CGHalfConv import C3k2_CGHalfConv, CGHalfConv
+from ultralytics.nn.add.block.C3K2CGHalfConv import C3k2_CGHalfConv
 from ultralytics.nn.add.block.C3K2DEConv import C3k2_DEConv, C3k2_DEConv2, DEConv
 from ultralytics.nn.add.block.C3K2DFF import C3k2_DFF_1, C3k2_DFF_2
 from ultralytics.nn.add.block.C3K2DIFF import C3k2_DIFF, C2PSA_DIFF
@@ -68,7 +68,8 @@ from ultralytics.nn.add.downSample.WTFDConv import WTFDown
 from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
-from ultralytics.nn.improve.block.C3K2WTSCConv import C3k2_WTSCConv
+from ultralytics.nn.improve.block.C3K2CGHalfConvWTConv import C3k2_CGHalfWTConv
+from ultralytics.nn.improve.block.C3K2CGHalfConvWTConv5 import C3k2_CGHalfWTConv5
 from ultralytics.nn.improve.upsample.LUMA import LUMA
 
 from ultralytics.nn.add.downSample.ContextGuidedDConv import ContextGuidedDConv
@@ -1730,8 +1731,8 @@ def parse_model(d, ch, verbose=True):
             FDConv,
             WTFDown,
             DEConv,
-            C3k2_WTSCConv,
-            CGHalfConv
+            C3k2_CGHalfWTConv,
+            C3k2_CGHalfWTConv5
 
 
         ]
@@ -1800,7 +1801,7 @@ def parse_model(d, ch, verbose=True):
             C3k2_SPSConv,
             C3k2_OREPA_neck,
             C3k2_OREPA_backbone,
-            C3k2_WTSCConv
+            C3k2_WTSCConv,
 
         }
     )

@@ -13,8 +13,8 @@ train:
 
   epochs: 300
   close_mosaic: 45
-  model_name: "yolo11n_C3k2WTSCConv_C3k2FDConv.yaml"
-  dataset_yaml: "/NWPU_VHR.yaml"
+  model_name: "yolo11n.yaml"
+  dataset_yaml: "/MAIZE.yaml"
   seed: 42
   optimizer: "SGD"
   amp: false
