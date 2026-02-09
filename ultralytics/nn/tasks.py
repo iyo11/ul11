@@ -19,8 +19,8 @@ from ultralytics.nn.add.attention.GAM import GAM
 from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
-from ultralytics.nn.add.block.C3K2CGHalfConv import C3k2_CGHalfConv
-from ultralytics.nn.add.block.C3K2DEConv import C3k2_DEConv, C3k2_DEConv2, DEConv
+from ultralytics.nn.add.block.C3K2CGHalfConv import C3k2_CGHalfConv, CGHalfConv
+from ultralytics.nn.add.block.C3K2DEConv import C3k2_DEConv, DEConv
 from ultralytics.nn.add.block.C3K2DFF import C3k2_DFF_1, C3k2_DFF_2
 from ultralytics.nn.add.block.C3K2DIFF import C3k2_DIFF, C2PSA_DIFF
 from ultralytics.nn.add.block.C3K2DSConv import C3k2_DSConv
@@ -59,6 +59,8 @@ from ultralytics.nn.add.block.C3K2GatedAttnetion import C3k2_GatedAttention, Gat
 from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv, WTConv2d
 from ultralytics.nn.add.block.C3k2CirculantAttention import C3k2_CirculantAttention
 from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
+from ultralytics.nn.add.conv.LTFFAConv import LTFFAConv
+from ultralytics.nn.add.conv.TFFAConv import TFFAConv
 from ultralytics.nn.add.downSample.FDConv import FDConv
 from ultralytics.nn.add.downSample.SADConv import SADConv
 from ultralytics.nn.add.downSample.AKDConv import AKDConv
@@ -69,7 +71,6 @@ from ultralytics.nn.add.moe.esmoe import ESMoE
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
 from ultralytics.nn.improve.block.C3K2CGHalfConvWTConv import C3k2_CGHalfWTConv
-from ultralytics.nn.improve.block.C3K2CGHalfConvWTConv5 import C3k2_CGHalfWTConv5
 from ultralytics.nn.improve.upsample.LUMA import LUMA
 
 from ultralytics.nn.add.downSample.ContextGuidedDConv import ContextGuidedDConv
@@ -1731,8 +1732,10 @@ def parse_model(d, ch, verbose=True):
             FDConv,
             WTFDown,
             DEConv,
+            CGHalfConv,
             C3k2_CGHalfWTConv,
-            C3k2_CGHalfWTConv5
+            TFFAConv,
+            LTFFAConv
 
 
         ]
@@ -1801,7 +1804,7 @@ def parse_model(d, ch, verbose=True):
             C3k2_SPSConv,
             C3k2_OREPA_neck,
             C3k2_OREPA_backbone,
-            C3k2_WTSCConv,
+            C3k2_CGHalfWTConv
 
         }
     )
