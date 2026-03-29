@@ -60,6 +60,7 @@ from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv, WTConv2d
 from ultralytics.nn.add.block.C3k2CirculantAttention import C3k2_CirculantAttention
 from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
 from ultralytics.nn.add.conv.LTFFAConv import LTFFAConv
+from ultralytics.nn.add.conv.ODConv import C2f_ODConv
 from ultralytics.nn.add.conv.TFFAConv import TFFAConv
 from ultralytics.nn.add.downSample.FDConv import FDConv
 from ultralytics.nn.add.downSample.SADConv import SADConv
@@ -1735,7 +1736,8 @@ def parse_model(d, ch, verbose=True):
             CGHalfConv,
             C3k2_CGHalfWTConv,
             TFFAConv,
-            LTFFAConv
+            LTFFAConv,
+            C2f_ODConv
 
 
         ]

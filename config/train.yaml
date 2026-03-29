@@ -11,9 +11,9 @@ train:
     workers: 10
     cache: true
 
-  epochs: 300
-  close_mosaic: 45
-  model_name: "yolo11n_ContextGuidedConv_ONB.yaml"
+  epochs: 200
+  close_mosaic: 10
+  model_name: "yolo11n_ContextGuidedConv_ONB_C2PSA_DIFF.yaml"
   dataset_yaml: "/NWPU_VHR.yaml"
   seed: 42
   optimizer: "SGD"
