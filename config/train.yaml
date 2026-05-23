@@ -13,11 +13,11 @@ train:
 
   epochs: 200
   close_mosaic: 10
-  model_name: "yolo11n_ContextGuidedConv_ONB_C2PSA_DIFF.yaml"
+  model_name: "yolo11n_C3k2CGHalfConv_C2PSABinaryAttention.yaml"
   dataset_yaml: "/NWPU_VHR.yaml"
   seed: 42
   optimizer: "SGD"
-  amp: false
+  amp: true
   patience: 0
   pretrained: true
   module_edition: "e0"

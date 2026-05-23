@@ -19,14 +19,16 @@ from ultralytics.nn.add.attention.GAM import GAM
 from ultralytics.nn.add.attention.CoordinateAttention import CoordinateAttention
 from ultralytics.nn.add.attention.CrossAxisAttention import CrossAxisAttention
 from ultralytics.nn.add.attention.FCAttention import FCAttention
+from ultralytics.nn.add.block.C2PSA_BinaryAttention import C2PSA_BinaryAttention
 from ultralytics.nn.add.block.C3K2CGHalfConv import C3k2_CGHalfConv, CGHalfConv
 from ultralytics.nn.add.block.C3K2DEConv import C3k2_DEConv, DEConv
+from ultralytics.nn.add.block.C3K2DEG import C3k2_DEGConv
 from ultralytics.nn.add.block.C3K2DFF import C3k2_DFF_1, C3k2_DFF_2
 from ultralytics.nn.add.block.C3K2DIFF import C3k2_DIFF, C2PSA_DIFF
 from ultralytics.nn.add.block.C3K2DSConv import C3k2_DSConv
 from ultralytics.nn.add.block.C3K2DWRSeg import C3k2_DWRSeg
 from ultralytics.nn.add.block.C3K2Dual import C3k2_Dual, C2f_Dual
-from ultralytics.nn.add.block.C3K2DynamicConv import C3k2_GhostModule_DynamicConv
+from ultralytics.nn.add.block.C3K2DynamicConv import C3k2_GhostModule_DynamicConv, DynamicConv
 from ultralytics.nn.add.block.C3K2FDConv import C3k2_FDConv
 from ultralytics.nn.add.block.C3K2FasterBlock import C3k2_FasterBlock
 from ultralytics.nn.add.block.C3K2FasterPConv import C3k2_FasterPConv
@@ -41,12 +43,15 @@ from ultralytics.nn.add.block.C3K2MSCB import C3k2_MSCB1, C3k2_MSCB2
 from ultralytics.nn.add.block.C3K2ODConv import C3k2_ODConv, ODConv2d
 from ultralytics.nn.add.block.C3K2OREPA import C3k2_OREPA_neck, C3k2_OREPA_backbone, OREPA
 from ultralytics.nn.add.block.C3K2PConv import C3k2_PConv1, C3k2_PConv2
+from ultralytics.nn.add.block.C3K2PFG import C3k2_PFG
 from ultralytics.nn.add.block.C3K2PSPConv import C3k2_PSConv, C3k2_SPSConv
 from ultralytics.nn.add.block.C3K2RFAConv import RFAConv, C3k2_RFAConv
 from ultralytics.nn.add.block.C3K2SAConv import C3k2_SAConv
 from ultralytics.nn.add.block.C3K2SFS import C3k2_SFS
 from ultralytics.nn.add.block.C3K2ScConv import C3k2_ScConv, ScConv
+from ultralytics.nn.add.block.C3K2UIB import C3k2_UIB
 from ultralytics.nn.add.block.C3K2WConv import C3k2_WConv
+from ultralytics.nn.add.block.C3K2_BinaryAttention import C3k2_BinaryAttention
 from ultralytics.nn.add.block.C3K2iAFF import C3k2_iAFF
 from ultralytics.nn.add.block.C3k2MSGDC import DSC3k2_MSGDC, MSGDC3k2
 from ultralytics.nn.add.block.C3k2MKP import C3k2_MKP
@@ -59,6 +64,7 @@ from ultralytics.nn.add.block.C3K2GatedAttnetion import C3k2_GatedAttention, Gat
 from ultralytics.nn.add.block.C3K2WTConv import C3k2_WTConv, WTConv2d
 from ultralytics.nn.add.block.C3k2CirculantAttention import C3k2_CirculantAttention
 from ultralytics.nn.add.block.C3k2SFMB import C3k2_SFMB
+from ultralytics.nn.add.conv.DynamicGhostConv import DynamicGhostConv
 from ultralytics.nn.add.conv.LTFFAConv import LTFFAConv
 from ultralytics.nn.add.conv.ODConv import C2f_ODConv
 from ultralytics.nn.add.conv.TFFAConv import TFFAConv
@@ -69,6 +75,7 @@ from ultralytics.nn.add.downSample.PWDConv import PWD2d
 from ultralytics.nn.add.downSample.SCDConv import ScDConv
 from ultralytics.nn.add.downSample.WTFDConv import WTFDown
 from ultralytics.nn.add.moe.esmoe import ESMoE
+from ultralytics.nn.add.upsample.AdaptiveHybridUpsample import AdaptiveHybridUpsample
 from ultralytics.nn.add.upsample.WFU import WFU
 from ultralytics.nn.improve.attention.OmniGatedSDPA import OmniGatedSDPA
 from ultralytics.nn.improve.block.C3K2CGHalfConvWTConv import C3k2_CGHalfWTConv
@@ -1737,7 +1744,14 @@ def parse_model(d, ch, verbose=True):
             C3k2_CGHalfWTConv,
             TFFAConv,
             LTFFAConv,
-            C2f_ODConv
+            C2f_ODConv,
+            C3k2_PFG,
+            C3k2_DEGConv,
+            C3k2_BinaryAttention,
+            DynamicGhostConv,
+            AdaptiveHybridUpsample,
+            C2PSA_BinaryAttention,
+            C3k2_UIB
 
 
         ]
@@ -1806,7 +1820,11 @@ def parse_model(d, ch, verbose=True):
             C3k2_SPSConv,
             C3k2_OREPA_neck,
             C3k2_OREPA_backbone,
-            C3k2_CGHalfWTConv
+            C3k2_CGHalfWTConv,
+            C3k2_PFG,
+            C3k2_DEGConv,
+            C3k2_BinaryAttention,
+            C3k2_UIB
 
         }
     )
@@ -1857,7 +1875,10 @@ def parse_model(d, ch, verbose=True):
             c1 = [ch[x] for x in f]
             c2 = c1[0]
             args = [c1]
-
+        elif m is AdaptiveHybridUpsample:
+            c1 = ch[f]
+            args = [c1, *args]
+            c2 = c1
 
         elif m in base_modules:
             c1, c2 = ch[f], args[0]

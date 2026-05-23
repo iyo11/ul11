@@ -11,19 +11,18 @@ train:
     cache: true
 
   model_name:
-    - "yolo11n_PreConv_FPN_C3k2WT.yaml"
-    - "yolo11n_C3k2PConv2.yaml"
-    - "yolo11n_C3k2ScConv.yaml"
-    - "yolo11n_C3K2WTConv.yaml"
-    - "yolo11n_C3k2WTConv_C3k2FDConv2.yaml"
+ #   - "yolo11n.yaml"
+    - "yolo11n_C3k2UIB1.yaml"
+    - "yolo11n_C3k2UIB2.yaml"
+
 
 
   dataset_yaml: "/NWPU_VHR.yaml"
   epochs: 300
-  close_mosaic: 45
+  close_mosaic: 25
   seed: 42
   optimizer: "SGD"
-  amp: false
+  amp: true
   patience: 0
   pretrained: true
   module_edition: "e0"
